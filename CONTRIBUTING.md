@@ -25,8 +25,8 @@ cargo install cargo-deny
 
 ```bash
 # Clone the repository
-git clone https://github.com/zircote/rlm.git
-cd rlm
+git clone https://github.com/zircote/rlm-rs.git
+cd rlm-rs
 
 # Build the project
 cargo build

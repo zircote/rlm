@@ -1,6 +1,6 @@
 # rlm-rs
 
-[![CI](https://github.com/zircote/rlm/actions/workflows/ci.yml/badge.svg)](https://github.com/zircote/rlm/actions/workflows/ci.yml)
+[![CI](https://github.com/zircote/rlm-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/zircote/rlm-rs/actions/workflows/ci.yml)
 [![Rust Version](https://img.shields.io/badge/rust-1.85%2B-dea584?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -40,8 +40,8 @@ brew install rlm-rs
 ### From Source
 
 ```bash
-git clone https://github.com/zircote/rlm.git
-cd rlm
+git clone https://github.com/zircote/rlm-rs.git
+cd rlm-rs
 make install
 ```
 
