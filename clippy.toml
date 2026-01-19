@@ -1,0 +1,81 @@
+# Clippy configuration
+# https://doc.rust-lang.org/clippy/configuration.html
+
+# Maximum cognitive complexity for functions
+cognitive-complexity-threshold = 25
+
+# Maximum allowed nesting depth
+max-nesting-depth = 4
+
+# Maximum number of lines in a function
+too-many-lines-threshold = 100
+
+# Maximum number of arguments a function or method can have
+too-many-arguments-threshold = 7
+
+# Maximum number of struct fields
+max-struct-bools = 3
+
+# Warn on large types passed by value
+pass-by-value-size-limit = 256
+
+# Types that are allowed to have a large size difference in variants
+large-error-threshold = 128
+
+# Minimum length for string slice to be considered as potential constant
+single-char-binding-names-threshold = 4
+
+# Allow certain patterns in test code
+allow-dbg-in-tests = true
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+allow-print-in-tests = true
+
+# MSRV for lint behavior
+msrv = "1.80"
+
+# Type complexity threshold
+type-complexity-threshold = 250
+
+# Avoid false positives for doc comments
+doc-valid-idents = [
+    "GitHub",
+    "GitLab",
+    "JavaScript",
+    "TypeScript",
+    "PostgreSQL",
+    "MongoDB",
+    "WebAssembly",
+    "WebSocket",
+    "OAuth",
+    "OpenAPI",
+    "GraphQL",
+    "README",
+    "API",
+    "APIs",
+    "CLI",
+    "HTTP",
+    "HTTPS",
+    "JSON",
+    "YAML",
+    "TOML",
+    "XML",
+    "SQL",
+    "UUID",
+    "UTF",
+    "ASCII",
+    "macOS",
+    "iOS",
+    "FreeBSD",
+    "OpenBSD",
+    "NetBSD",
+]
+
+# Allowed wildcard imports
+allowed-wildcard-imports = []
+
+# Trivial copy size
+trivial-copy-size-limit = 16
+
+# Enum variant size threshold
+enum-variant-size-threshold = 200

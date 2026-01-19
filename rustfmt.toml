@@ -1,0 +1,104 @@
+# rustfmt configuration
+# https://rust-lang.github.io/rustfmt/
+
+# Edition to use for parsing
+edition = "2024"
+
+# Maximum width of each line
+max_width = 100
+
+# Number of spaces per tab
+tab_spaces = 4
+
+# Use spaces instead of tabs
+hard_tabs = false
+
+# Put single-expression functions on a single line
+fn_single_line = false
+
+# Force multiline closures and match arms to be on a single line if possible
+where_single_line = false
+
+# Use field init shorthand (e.g., `Point { x, y }` instead of `Point { x: x, y: y }`)
+use_field_init_shorthand = true
+
+# Format string literals where necessary
+format_strings = false
+
+# Break comments to fit on the line
+wrap_comments = true
+
+# Maximum length of comments before wrapping
+comment_width = 100
+
+# Normalize documentation comments
+normalize_doc_attributes = true
+
+# Format code in doc comments
+format_code_in_doc_comments = true
+
+# Put empty function body braces on the same line
+empty_item_single_line = true
+
+# Put struct expression braces on the same line
+struct_lit_single_line = true
+
+# Put field attributes on the same line as the field
+struct_field_align_threshold = 0
+
+# Format macro bodies
+format_macro_bodies = true
+format_macro_matchers = true
+
+# Reorder imports
+reorder_imports = true
+reorder_modules = true
+
+# Group imports
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+
+# Newline style
+newline_style = "Unix"
+
+# Trailing comma settings
+match_arm_blocks = true
+match_block_trailing_comma = true
+trailing_comma = "Vertical"
+trailing_semicolon = true
+
+# Brace style
+brace_style = "SameLineWhere"
+
+# Control flow formatting
+control_brace_style = "AlwaysSameLine"
+
+# Indentation for items inside an impl block
+indent_style = "Block"
+
+# Force use of version-sort for impl blocks
+reorder_impl_items = true
+
+# Number formatting
+hex_literal_case = "Upper"
+
+# Use compact style for small expressions
+short_array_element_width_threshold = 10
+
+# Force spacing around operators
+space_before_colon = false
+space_after_colon = true
+spaces_around_ranges = false
+
+# Type annotations
+type_punctuation_density = "Wide"
+
+# Error on formatting issues (useful in CI)
+error_on_line_overflow = false
+error_on_unformatted = false
+
+# Single-line let-else style
+single_line_let_else_max_width = 50
+
+# Version for stability
+version = "Two"
