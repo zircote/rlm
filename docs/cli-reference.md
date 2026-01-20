@@ -113,7 +113,7 @@ rlm-rs load [OPTIONS] <FILE>
 |--------|---------|-------------|
 | `-n, --name <NAME>` | filename | Custom name for the buffer |
 | `-c, --chunker <STRATEGY>` | `semantic` | Chunking strategy: `fixed`, `semantic`, `parallel` |
-| `--chunk-size <SIZE>` | `240000` | Chunk size in characters (~60k tokens) |
+| `--chunk-size <SIZE>` | `3000` | Chunk size in characters (~750 tokens) |
 | `--overlap <SIZE>` | `500` | Overlap between chunks in characters |
 
 **Chunking Strategies:**
@@ -369,7 +369,7 @@ rlm-rs chunk-indices [OPTIONS] <BUFFER>
 **Options:**
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--chunk-size <SIZE>` | `240000` | Chunk size in characters |
+| `--chunk-size <SIZE>` | `3000` | Chunk size in characters |
 | `--overlap <SIZE>` | `500` | Overlap between chunks |
 
 **Examples:**
@@ -400,7 +400,7 @@ rlm-rs write-chunks [OPTIONS] <BUFFER>
 | Option | Default | Description |
 |--------|---------|-------------|
 | `-o, --out-dir <DIR>` | `.rlm/chunks` | Output directory |
-| `--chunk-size <SIZE>` | `240000` | Chunk size in characters |
+| `--chunk-size <SIZE>` | `3000` | Chunk size in characters |
 | `--overlap <SIZE>` | `500` | Overlap between chunks |
 | `--prefix <PREFIX>` | `chunk` | Filename prefix |
 
@@ -668,9 +668,9 @@ rlm-rs global project_name --delete
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `chunk_size` | 240,000 chars | ~60,000 tokens (utilizes Claude's context window) |
+| `chunk_size` | 3,000 chars | ~750 tokens (optimized for semantic search) |
 | `overlap` | 500 chars | Context continuity between chunks |
-| `max_chunk_size` | 250,000 chars | Maximum allowed chunk size |
+| `max_chunk_size` | 50,000 chars | Maximum allowed chunk size |
 
 ### Environment Variables
 

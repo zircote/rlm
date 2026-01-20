@@ -17,15 +17,15 @@ pub use parallel::ParallelChunker;
 pub use semantic::SemanticChunker;
 pub use traits::{ChunkMetadata as ChunkerMetadata, Chunker};
 
-/// Default chunk size in characters (~60k tokens at 4 chars/token).
-/// Sized to utilize most of Claude's context window per chunk.
-pub const DEFAULT_CHUNK_SIZE: usize = 240_000;
+/// Default chunk size in characters (~750 tokens at 4 chars/token).
+/// Sized for granular semantic search with embeddings.
+pub const DEFAULT_CHUNK_SIZE: usize = 3_000;
 
 /// Default overlap size in characters (for context continuity).
 pub const DEFAULT_OVERLAP: usize = 500;
 
-/// Maximum allowed chunk size (250k chars, ~62k tokens).
-pub const MAX_CHUNK_SIZE: usize = 250_000;
+/// Maximum allowed chunk size (50k chars, ~12.5k tokens).
+pub const MAX_CHUNK_SIZE: usize = 50_000;
 
 /// Creates the default chunker (semantic).
 #[must_use]
