@@ -16,11 +16,11 @@ fn main() -> ExitCode {
         Ok(output) => {
             if !output.is_empty() {
                 // Handle broken pipe gracefully (e.g., when piped to `head` or `jq`)
-                if let Err(e) = write!(io::stdout(), "{output}") {
-                    if e.kind() != io::ErrorKind::BrokenPipe {
-                        eprintln!("Error writing to stdout: {e}");
-                        return ExitCode::FAILURE;
-                    }
+                if let Err(e) = write!(io::stdout(), "{output}")
+                    && e.kind() != io::ErrorKind::BrokenPipe
+                {
+                    eprintln!("Error writing to stdout: {e}");
+                    return ExitCode::FAILURE;
                 }
             }
             ExitCode::SUCCESS

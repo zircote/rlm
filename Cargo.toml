@@ -1,6 +1,6 @@
 [package]
 name = "rlm-rs"
-version = "1.2.2"
+version = "1.2.3"
 edition = "2024"
 rust-version = "1.88"
 description = "Recursive Language Model (RLM) REPL for Claude Code - handles long-context tasks via chunking and recursive sub-LLM calls"
@@ -98,6 +98,9 @@ all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 nursery = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
+
+# Allow multiple crate versions (transitive deps from fastembed we can't control)
+multiple_crate_versions = "allow"
 
 # Specific lints to deny
 unwrap_used = "deny"

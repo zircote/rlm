@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-01-20
+
+### Fixed
+
+- **CI**: Allow `multiple_crate_versions` lint (fastembed transitive deps)
+- **CI**: Add ISC, BSD, MPL-2.0, CDLA-Permissive-2.0 to allowed licenses
+- **CI**: Ignore unmaintained `paste` advisory (fastembed transitive dep)
+- **CI**: Skip openssl ban check for fastembed transitive deps
+
 ## [1.2.2] - 2026-01-20
 
 ### Fixed
@@ -97,7 +106,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Variable storage (context and global)
 - Export functionality
 
-[Unreleased]: https://github.com/zircote/rlm-rs/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/zircote/rlm-rs/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/zircote/rlm-rs/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/zircote/rlm-rs/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/zircote/rlm-rs/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/zircote/rlm-rs/compare/v1.1.2...v1.2.0

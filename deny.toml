@@ -16,7 +16,10 @@ db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 
 # Ignore specific advisories (with justification)
-ignore = []
+ignore = [
+    # paste is unmaintained but pulled in by fastembed → tokenizers (transitive dep)
+    "RUSTSEC-2024-0436",
+]
 
 #==============================================================================
 # Licenses - Allowed licenses
@@ -31,6 +34,11 @@ allow = [
     "Apache-2.0",
     "Zlib",
     "Unicode-3.0",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
 ]
 
 #==============================================================================
@@ -44,8 +52,12 @@ workspace-default-features = "allow"
 external-default-features = "allow"
 
 # Deny specific crates
-deny = [
-    { crate = "openssl", reason = "Use rustls instead for TLS" },
+deny = []
+
+# Skip checking transitive deps we can't control
+skip = [
+    # openssl pulled in by fastembed transitive deps (native-tls fallback)
+    { crate = "openssl", reason = "Transitive dep from fastembed we can't control" },
 ]
 
 #==============================================================================
