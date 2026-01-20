@@ -764,6 +764,14 @@ impl SqliteStorage {
     pub fn search_fts(&self, query: &str, limit: usize) -> Result<Vec<(i64, f64)>> {
         // FTS5 bm25() returns negative scores, more negative = better match
         // We negate it so higher scores = better match
+
+        // Convert space-separated terms to OR query for more forgiving search
+        // "CLI tool" becomes "CLI OR tool" so either term matches
+        let fts_query = query
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" OR ");
+
         let mut stmt = self
             .conn
             .prepare(
@@ -778,7 +786,7 @@ impl SqliteStorage {
             .map_err(StorageError::from)?;
 
         let results = stmt
-            .query_map(params![query, limit as i64], |row| {
+            .query_map(params![fts_query, limit as i64], |row| {
                 Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)?))
             })
             .map_err(StorageError::from)?

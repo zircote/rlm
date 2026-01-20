@@ -275,6 +275,10 @@ fn cmd_load(
     // Store chunks
     storage.add_chunks(buffer_id, &chunks)?;
 
+    // Generate embeddings for semantic search (automatic during load)
+    let embedder = create_embedder()?;
+    let embedded_count = embed_buffer_chunks(&mut storage, embedder.as_ref(), buffer_id)?;
+
     // Update buffer with chunk count
     let mut updated_buffer =
         storage
@@ -293,10 +297,11 @@ fn cmd_load(
 
     match format {
         OutputFormat::Text => Ok(format!(
-            "Loaded buffer {} (ID: {}) with {} chunks from {}\n",
+            "Loaded buffer {} (ID: {}) with {} chunks ({} embedded) from {}\n",
             updated_buffer.name.as_deref().unwrap_or("unnamed"),
             buffer_id,
             chunks.len(),
+            embedded_count,
             file.display()
         )),
         OutputFormat::Json => {
@@ -304,6 +309,7 @@ fn cmd_load(
                 "buffer_id": buffer_id,
                 "name": updated_buffer.name,
                 "chunk_count": chunks.len(),
+                "embedded_count": embedded_count,
                 "size": content.len(),
                 "source": file.to_string_lossy()
             });
@@ -685,6 +691,17 @@ fn cmd_search(
     Ok(format_search_results(&results, query, mode, format))
 }
 
+/// Formats a score for display, using scientific notation for very small values.
+fn format_score(score: f64) -> String {
+    if score == 0.0 {
+        "0".to_string()
+    } else if score.abs() < 0.0001 {
+        format!("{score:.2e}")
+    } else {
+        format!("{score:.4}")
+    }
+}
+
 fn format_search_results(
     results: &[SearchResult],
     query: &str,
@@ -714,10 +731,10 @@ fn format_search_results(
             for result in results {
                 let semantic = result
                     .semantic_score
-                    .map_or_else(|| "-".to_string(), |s| format!("{s:.4}"));
+                    .map_or_else(|| "-".to_string(), |s| format_score(f64::from(s)));
                 let bm25 = result
                     .bm25_score
-                    .map_or_else(|| "-".to_string(), |s| format!("{s:.4}"));
+                    .map_or_else(|| "-".to_string(), format_score);
 
                 let _ = writeln!(
                     output,
@@ -939,9 +956,20 @@ fn cmd_chunk_embed(
             }
         }
         if all_embedded && !chunks.is_empty() {
-            return Ok(format!(
-                "Buffer '{buffer_name}' already has embeddings. Use --force to re-embed.\n"
-            ));
+            return match format {
+                OutputFormat::Text => Ok(format!(
+                    "Buffer '{buffer_name}' already has embeddings. Use --force to re-embed.\n"
+                )),
+                OutputFormat::Json => {
+                    let json = serde_json::json!({
+                        "buffer_id": buffer_id,
+                        "buffer_name": buffer_name,
+                        "chunks_embedded": 0,
+                        "already_embedded": true
+                    });
+                    Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
+                }
+            };
         }
     }
 
