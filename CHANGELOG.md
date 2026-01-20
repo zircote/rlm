@@ -7,18 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-01-20
+
 ### Added
 
 - **Search**: Search results now include `index` (document position) and `buffer_id` fields for temporal ordering
+- **Documentation**: Architecture Decision Records (ADRs) documenting 10 key architectural decisions from project history
+
+### Changed
+
+- **Embedding**: Switch from all-MiniLM-L6-v2 to BGE-M3 embedding model
+  - Dimensions increased from 384 to 1024 for richer semantic representation
+  - Token context increased from ~512 to 8192 for full chunk coverage
+  - **Breaking**: Existing embeddings must be regenerated (schema migration v3 clears old embeddings)
+- **Build**: Bump MSRV to 1.88
 
 ### Fixed
 
 - **Search**: Escape FTS5 special characters in search queries to prevent syntax errors
 - **Chunking**: Validate UTF-8 boundaries in semantic chunker search window to prevent panics on multi-byte characters
-
-### Changed
-
-- **Build**: Bump MSRV to 1.88
 
 ## [1.1.2] - 2026-01-19
 
@@ -78,7 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Variable storage (context and global)
 - Export functionality
 
-[Unreleased]: https://github.com/zircote/rlm-rs/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/zircote/rlm-rs/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/zircote/rlm-rs/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/zircote/rlm-rs/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/zircote/rlm-rs/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/zircote/rlm-rs/compare/v1.0.0...v1.1.0

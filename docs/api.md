@@ -12,7 +12,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rlm-rs = "0.1"
+rlm-rs = "1.1"
 ```
 
 Basic usage:
@@ -226,6 +226,9 @@ Manages variables and state.
 pub struct Context {
     pub variables: HashMap<String, ContextValue>,
     pub globals: HashMap<String, ContextValue>,
+    pub buffer_ids: Vec<i64>,
+    pub cwd: Option<String>,
+    pub metadata: ContextMetadata,
 }
 ```
 
@@ -238,10 +241,12 @@ Typed values for context variables.
 ```rust
 pub enum ContextValue {
     String(String),
-    Number(i64),
+    Integer(i64),
     Float(f64),
     Boolean(bool),
     List(Vec<ContextValue>),
+    Map(HashMap<String, ContextValue>),
+    Null,
 }
 ```
 
@@ -368,9 +373,9 @@ let chunks = chunker.chunk(1, text, Some(&metadata))?;
 ```rust
 use rlm_rs::chunking::{DEFAULT_CHUNK_SIZE, DEFAULT_OVERLAP, MAX_CHUNK_SIZE};
 
-// DEFAULT_CHUNK_SIZE = 40_000 (~10k tokens)
+// DEFAULT_CHUNK_SIZE = 3_000 (~750 tokens)
 // DEFAULT_OVERLAP = 500
-// MAX_CHUNK_SIZE = 250_000
+// MAX_CHUNK_SIZE = 50_000
 ```
 
 ---
@@ -470,7 +475,7 @@ Enable with `vector-search` feature:
 
 ```toml
 [dependencies]
-rlm-rs = { version = "0.1", features = ["vector-search"] }
+rlm-rs = { version = "1.1", features = ["full-search"] }
 ```
 
 ```rust
@@ -680,7 +685,7 @@ fn process_document(path: &str) -> Result<()> {
     let buffer_id = storage.add_buffer(&buffer)?;
 
     // 4. Chunk the content
-    let chunker = SemanticChunker::with_size_and_overlap(40_000, 500);
+    let chunker = SemanticChunker::with_size_and_overlap(3_000, 500);
     let chunks = chunker.chunk(buffer_id, &content, None)?;
 
     println!("Created {} chunks", chunks.len());

@@ -5,7 +5,7 @@
 //!
 //! # Feature Flags
 //!
-//! - `fastembed-embeddings`: Enables `FastEmbed` with all-MiniLM-L6-v2 (384 dimensions)
+//! - `fastembed-embeddings`: Enables `FastEmbed` with BGE-M3 (1024 dimensions, 8192 token max)
 //! - Without the feature: Uses hash-based fallback (deterministic but not semantic)
 
 mod fallback;
@@ -20,11 +20,11 @@ pub use fastembed_impl::FastEmbedEmbedder;
 
 use crate::Result;
 
-/// Default embedding dimensions for the all-MiniLM-L6-v2 model.
+/// Default embedding dimensions for the BGE-M3 model.
 ///
 /// This is the authoritative source for embedding dimensions across the codebase.
 /// All vector backends should use this constant for consistency.
-pub const DEFAULT_DIMENSIONS: usize = 384;
+pub const DEFAULT_DIMENSIONS: usize = 1024;
 
 /// Trait for embedding generators.
 ///

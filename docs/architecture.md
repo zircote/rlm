@@ -35,14 +35,14 @@ RLM-RS implements the Recursive Language Model (RLM) pattern from [arXiv:2512.24
 │  │  Buffer │ Chunk │ Context │ Variable                        ││
 │  └─────────────────────────┬───────────────────────────────────┘│
 │                            │                                     │
-│  ┌────────────┬────────────┴────────────┬────────────┐         │
-│  │  Chunking  │       Storage           │    I/O     │         │
-│  │  ─────────  │       ───────           │    ───     │         │
-│  │  Fixed     │       SQLite            │   Reader   │         │
-│  │  Semantic  │       (rusqlite)        │   (mmap)   │         │
-│  │  Parallel  │                         │   Unicode  │         │
-│  └────────────┴─────────────────────────┴────────────┘         │
-└─────────────────────────────────────────────────────────────────┘
+│  ┌────────────┬────────────┴────────────┬────────────┬────────────┐│
+│  │  Chunking  │       Storage           │ Embedding  │    I/O     ││
+│  │  ─────────  │       ───────           │ ─────────  │    ───     ││
+│  │  Fixed     │       SQLite            │  BGE-M3   │   Reader   ││
+│  │  Semantic  │       FTS5 (BM25)       │ fastembed │   (mmap)   ││
+│  │  Parallel  │       Hybrid Search     │  (1024d)  │   Unicode  ││
+│  └────────────┴─────────────────────────┴────────────┴────────────┘│
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Module Structure
@@ -66,10 +66,16 @@ src/
 │   ├── semantic.rs  # Sentence/paragraph-aware chunking
 │   └── parallel.rs  # Multi-threaded chunking
 │
+├── embedding/       # Embedding generation
+│   ├── mod.rs       # Embedding trait and constants
+│   ├── fastembed_impl.rs  # BGE-M3 via fastembed-rs
+│   └── fallback.rs  # Fallback when fastembed unavailable
+│
 ├── storage/         # Persistence layer
 │   ├── mod.rs
 │   ├── traits.rs    # Storage trait definition
-│   └── sqlite.rs    # SQLite implementation
+│   ├── sqlite.rs    # SQLite implementation
+│   └── search.rs    # Hybrid search (semantic + BM25 with RRF)
 │
 ├── io/              # File I/O
 │   ├── mod.rs
@@ -182,9 +188,9 @@ pub trait Chunker: Send + Sync {
 ### Default Configuration
 
 ```rust
-pub const DEFAULT_CHUNK_SIZE: usize = 40_000;   // ~10k tokens
+pub const DEFAULT_CHUNK_SIZE: usize = 3_000;    // ~750 tokens
 pub const DEFAULT_OVERLAP: usize = 500;          // Context continuity
-pub const MAX_CHUNK_SIZE: usize = 250_000;       // Safety limit
+pub const MAX_CHUNK_SIZE: usize = 50_000;        // Safety limit
 ```
 
 ## Storage Layer
@@ -292,12 +298,14 @@ The `unicode-segmentation` crate ensures proper handling of:
 - Sentence boundaries
 
 ```rust
-pub fn find_char_boundary(s: &str, pos: usize) -> usize {
+pub const fn find_char_boundary(s: &str, pos: usize) -> usize {
     if pos >= s.len() {
         return s.len();
     }
+    let bytes = s.as_bytes();
     let mut boundary = pos;
-    while !s.is_char_boundary(boundary) && boundary > 0 {
+    // UTF-8 continuation bytes start with 10xxxxxx (0x80-0xBF)
+    while boundary > 0 && (bytes[boundary] & 0xC0) == 0x80 {
         boundary -= 1;
     }
     boundary

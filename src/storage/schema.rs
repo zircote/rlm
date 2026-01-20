@@ -3,7 +3,7 @@
 //! Contains SQL schema and migration logic for the RLM `SQLite` database.
 
 /// Current schema version.
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
 
 /// SQL schema for initial database setup.
 pub const SCHEMA_SQL: &str = r"
@@ -172,12 +172,29 @@ END;
 INSERT INTO chunks_fts(rowid, content) SELECT id, content FROM chunks;
 ";
 
+/// SQL for v2 to v3 migration (clear embeddings for BGE-M3 model switch).
+///
+/// BGE-M3 uses 1024 dimensions vs 384 for all-MiniLM-L6-v2.
+/// Existing embeddings are incompatible and must be regenerated.
+const MIGRATION_V2_TO_V3: &str = r"
+-- Clear existing embeddings (incompatible dimensions: 384 -> 1024)
+-- Users must re-run embedding generation after this migration
+DELETE FROM chunk_embeddings;
+";
+
 /// Available migrations.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    from_version: 1,
-    to_version: 2,
-    sql: MIGRATION_V1_TO_V2,
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        from_version: 1,
+        to_version: 2,
+        sql: MIGRATION_V1_TO_V2,
+    },
+    Migration {
+        from_version: 2,
+        to_version: 3,
+        sql: MIGRATION_V2_TO_V3,
+    },
+];
 
 /// Gets migrations needed to upgrade from a version.
 #[must_use]

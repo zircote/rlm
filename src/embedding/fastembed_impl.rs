@@ -1,6 +1,6 @@
 //! `FastEmbed`-based semantic embedder.
 //!
-//! Provides real semantic embeddings using the all-MiniLM-L6-v2 model via fastembed-rs.
+//! Provides real semantic embeddings using the BGE-M3 model via fastembed-rs.
 //! Only available when the `fastembed-embeddings` feature is enabled.
 
 use crate::Result;
@@ -13,10 +13,15 @@ use std::sync::OnceLock;
 /// Uses `OnceLock` for lazy initialization on first use.
 static EMBEDDING_MODEL: OnceLock<std::sync::Mutex<fastembed::TextEmbedding>> = OnceLock::new();
 
-/// `FastEmbed` embedder using all-MiniLM-L6-v2.
+/// `FastEmbed` embedder using BGE-M3.
 ///
 /// Uses the fastembed-rs library for real semantic embeddings.
 /// The model is lazily loaded on first embed call to preserve cold start time.
+///
+/// BGE-M3 provides:
+/// - 1024 dimensions (vs 384 for `MiniLM`)
+/// - 8192 token context (vs ~512 for `MiniLM`)
+/// - Better multilingual support
 ///
 /// # Examples
 ///
@@ -25,7 +30,7 @@ static EMBEDDING_MODEL: OnceLock<std::sync::Mutex<fastembed::TextEmbedding>> = O
 ///
 /// let embedder = FastEmbedEmbedder::new()?;
 /// let embedding = embedder.embed("Hello, world!")?;
-/// assert_eq!(embedding.len(), 384);
+/// assert_eq!(embedding.len(), 1024);
 /// ```
 pub struct FastEmbedEmbedder {
     /// Model name for debugging.
@@ -43,7 +48,7 @@ impl FastEmbedEmbedder {
     #[allow(clippy::missing_const_for_fn)]
     pub fn new() -> Result<Self> {
         Ok(Self {
-            model_name: "all-MiniLM-L6-v2",
+            model_name: "BGE-M3",
         })
     }
 
@@ -58,7 +63,7 @@ impl FastEmbedEmbedder {
         }
 
         // Initialize the model
-        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::AllMiniLML6V2)
+        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::BGEM3)
             .with_show_download_progress(false);
 
         let model = fastembed::TextEmbedding::try_new(options).map_err(|e| {
@@ -176,7 +181,7 @@ mod tests {
     #[test]
     fn test_model_name() {
         let embedder = FastEmbedEmbedder::new().unwrap();
-        assert_eq!(embedder.model_name(), "all-MiniLM-L6-v2");
+        assert_eq!(embedder.model_name(), "BGE-M3");
     }
 
     // Integration tests that require model download are marked #[ignore]
