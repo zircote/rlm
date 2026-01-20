@@ -87,8 +87,9 @@ impl SemanticChunker {
         }
 
         // Search window: look back up to 20% of chunk size for a good boundary
-        let search_start = target_pos.saturating_sub(self.chunk_size / 5);
-        let search_end = target_pos.min(text.len());
+        // Ensure both boundaries are valid UTF-8 character boundaries
+        let search_start = find_char_boundary(text, target_pos.saturating_sub(self.chunk_size / 5));
+        let search_end = find_char_boundary(text, target_pos.min(text.len()));
 
         if search_start >= search_end {
             return find_char_boundary(text, target_pos);
@@ -608,5 +609,58 @@ mod tests {
 
         // Should detect sentence boundaries
         assert!(!chunks.is_empty());
+    }
+
+    #[test]
+    fn test_semantic_chunker_multibyte_utf8_boundaries() {
+        // Test that multi-byte UTF-8 characters don't cause panics
+        // Smart quotes are 3 bytes each: " (0xE2 0x80 0x9C) and " (0xE2 0x80 0x9D)
+        let chunker = SemanticChunker::with_size(50).min_chunk_size(10);
+
+        // Text with smart quotes and other multi-byte chars
+        let text = "This is \u{201C}quoted text\u{201D} with smart quotes. \
+                    And more \u{201C}content\u{201D} here. \
+                    Plus some emoji \u{1F389} and Japanese \u{65E5}\u{672C}\u{8A9E} for good measure.";
+
+        let result = chunker.chunk(1, text, None);
+        assert!(result.is_ok(), "Should not panic on multi-byte UTF-8 chars");
+
+        let chunks = result.unwrap();
+        assert!(!chunks.is_empty());
+
+        // Verify all chunks are valid UTF-8 and match the source
+        for chunk in &chunks {
+            assert_eq!(&text[chunk.byte_range.clone()], chunk.content);
+        }
+    }
+
+    #[test]
+    fn test_semantic_chunker_large_multibyte_document() {
+        use std::fmt::Write;
+
+        // Simulate a document with many multi-byte characters throughout
+        let chunker = SemanticChunker::with_size(100).min_chunk_size(20);
+
+        // Build text with multi-byte chars at various positions
+        let mut text = String::new();
+        for i in 0..50 {
+            let _ = write!(
+                text,
+                "Section {i}: \u{201C}This is quoted content\u{201D} with data. "
+            );
+        }
+
+        let result = chunker.chunk(1, &text, None);
+        assert!(
+            result.is_ok(),
+            "Should handle large docs with multi-byte chars"
+        );
+
+        let chunks = result.unwrap();
+        // Verify chunk byte ranges are valid
+        for chunk in &chunks {
+            assert!(text.is_char_boundary(chunk.byte_range.start));
+            assert!(text.is_char_boundary(chunk.byte_range.end));
+        }
     }
 }
