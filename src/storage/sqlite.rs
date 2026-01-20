@@ -767,10 +767,7 @@ impl SqliteStorage {
 
         // Convert space-separated terms to OR query for more forgiving search
         // "CLI tool" becomes "CLI OR tool" so either term matches
-        let fts_query = query
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" OR ");
+        let fts_query = query.split_whitespace().collect::<Vec<_>>().join(" OR ");
 
         let mut stmt = self
             .conn
