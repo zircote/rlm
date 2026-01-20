@@ -441,6 +441,9 @@ proptest! {
 
 ## See Also
 
+- [RLM-Inspired Design](rlm-inspired-design.md) - How rlm-rs builds on the RLM paper
+- [Plugin Integration](plugin-integration.md) - Claude Code plugin setup and portability
 - [CLI Reference](cli-reference.md) - Complete command documentation
+- [API Reference](api.md) - Rust library documentation
 - [README.md](../README.md) - Project overview
 - [RLM Paper](https://arxiv.org/abs/2512.24601) - Original research paper

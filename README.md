@@ -175,6 +175,14 @@ The Minimum Supported Rust Version (MSRV) is **1.85**.
 
 MIT License - see [LICENSE](LICENSE) for details.
 
+## Documentation
+
+- [RLM-Inspired Design](docs/rlm-inspired-design.md) - How rlm-rs builds on the RLM paper
+- [Plugin Integration](docs/plugin-integration.md) - Integration with Claude Code, Copilot, Codex, and more
+- [Architecture](docs/architecture.md) - Internal architecture and design
+- [CLI Reference](docs/cli-reference.md) - Complete command documentation
+- [API Reference](docs/api.md) - Rust library documentation
+
 ## Acknowledgments
 
 - [claude_code_RLM](https://github.com/brainqub3/claude_code_RLM) - Original Python RLM implementation by [Brainqub3](https://brainqub3.com/) that inspired the creation of this project
