@@ -4,6 +4,16 @@
 //! for different entity types (buffers, chunks, embeddings) and functions
 //! for bidirectional conversion between inodes and entity IDs.
 
+// These casts are intentional for inode ↔ entity ID conversion.
+// IDs are always non-negative in practice, and the ranges are designed
+// to fit within both i64 and u64 positive ranges.
+// File extension checks are case-sensitive by design since we control the virtual filesystem filenames.
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::case_sensitive_file_extension_comparisons
+)]
+
 /// Root directory inode (standard FUSE convention).
 pub const INODE_ROOT: u64 = 1;
 

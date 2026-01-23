@@ -1,5 +1,24 @@
 // Allow unsafe for libc::getuid()/getgid() calls required by FUSE file attributes
 #![allow(unsafe_code)]
+// These lints are intentionally allowed for FUSE implementation:
+// - Casts: necessary for FUSE API compatibility (offset/size conversions, inode IDs)
+// - Pattern matching style: intentional for readability in FUSE callbacks
+// - Function length: FUSE callbacks are inherently long due to handling many inode types
+// - Option handling: match expressions are clearer than map_or for error handling with early returns
+// - Drop scope: RwLock guards in FUSE callbacks need to be held for the entire operation
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_wrap,
+    clippy::cast_possible_truncation,
+    clippy::single_match_else,
+    clippy::manual_let_else,
+    clippy::equatable_if_let,
+    clippy::match_same_arms,
+    clippy::too_many_lines,
+    clippy::assigning_clones,
+    clippy::option_if_let_else,
+    clippy::significant_drop_tightening
+)]
 
 //! FUSE virtual filesystem interface for rlm-rs.
 //!
@@ -97,7 +116,7 @@ impl RlmFs {
     ///
     /// # Arguments
     ///
-    /// * `storage` - The SQLite storage backend.
+    /// * `storage` - The `SQLite` storage backend.
     /// * `embedder` - The embedder for semantic search.
     #[must_use]
     pub fn new(storage: SqliteStorage, embedder: Arc<dyn Embedder>) -> Self {
@@ -642,31 +661,28 @@ impl Filesystem for RlmFs {
                     }
                 };
                 // List all chunks that have embeddings
-                match storage.list_buffers() {
-                    Ok(buffers) => {
-                        for buffer in buffers {
-                            if let Some(buffer_id) = buffer.id
-                                && let Ok(chunks) = storage.get_chunks(buffer_id)
-                            {
-                                for chunk in chunks {
-                                    if let Some(chunk_id) = chunk.id
-                                        && storage.has_embedding(chunk_id).unwrap_or(false)
-                                    {
-                                        let name = format!("{chunk_id}.json");
-                                        entries.push((
-                                            embedding_chunk_id_to_inode(chunk_id),
-                                            FileType::RegularFile,
-                                            name,
-                                        ));
-                                    }
+                if let Ok(buffers) = storage.list_buffers() {
+                    for buffer in buffers {
+                        if let Some(buffer_id) = buffer.id
+                            && let Ok(chunks) = storage.get_chunks(buffer_id)
+                        {
+                            for chunk in chunks {
+                                if let Some(chunk_id) = chunk.id
+                                    && storage.has_embedding(chunk_id).unwrap_or(false)
+                                {
+                                    let name = format!("{chunk_id}.json");
+                                    entries.push((
+                                        embedding_chunk_id_to_inode(chunk_id),
+                                        FileType::RegularFile,
+                                        name,
+                                    ));
                                 }
                             }
                         }
                     }
-                    Err(_) => {
-                        reply.error(EIO);
-                        return;
-                    }
+                } else {
+                    reply.error(EIO);
+                    return;
                 }
             }
             InodeType::SearchDir => {
@@ -736,7 +752,7 @@ impl Filesystem for RlmFs {
 
     fn setattr(
         &mut self,
-        _req: &Request,
+        req: &Request,
         ino: u64,
         _mode: Option<u32>,
         _uid: Option<u32>,
@@ -753,24 +769,21 @@ impl Filesystem for RlmFs {
         reply: ReplyAttr,
     ) {
         // Only handle truncate for search query
-        match classify_inode(ino) {
-            InodeType::SearchQuery => {
-                if let Some(0) = size {
-                    // Truncate query
-                    if let Ok(mut query) = self.search_query.write() {
-                        query.clear();
-                    }
-                    if let Ok(mut results) = self.search_results.write() {
-                        *results = b"[]".to_vec();
-                    }
+        if let InodeType::SearchQuery = classify_inode(ino) {
+            if size == Some(0) {
+                // Truncate query
+                if let Ok(mut query) = self.search_query.write() {
+                    query.clear();
                 }
-                let attr = self.file_attr(ino, size.unwrap_or(0));
-                reply.attr(&TTL, &attr);
+                if let Ok(mut results) = self.search_results.write() {
+                    *results = b"[]".to_vec();
+                }
             }
-            _ => {
-                // Re-fetch current attributes for other files
-                self.getattr(_req, ino, None, reply);
-            }
+            let attr = self.file_attr(ino, size.unwrap_or(0));
+            reply.attr(&TTL, &attr);
+        } else {
+            // Re-fetch current attributes for other files
+            self.getattr(req, ino, None, reply);
         }
     }
 }
@@ -779,7 +792,7 @@ impl Filesystem for RlmFs {
 ///
 /// # Arguments
 ///
-/// * `storage` - The SQLite storage backend.
+/// * `storage` - The `SQLite` storage backend.
 /// * `mountpoint` - The directory to mount the filesystem at.
 ///
 /// # Errors
@@ -803,8 +816,6 @@ pub fn mount(storage: SqliteStorage, mountpoint: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     // Note: Full integration tests would require actual FUSE mounting,
     // which requires root/fuse permissions. Unit tests focus on internal logic.
 
