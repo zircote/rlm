@@ -141,6 +141,8 @@ pub fn execute(cli: &Cli) -> Result<String> {
             }
             ChunkCommands::Status => cmd_chunk_status(&db_path, format),
         },
+        #[cfg(feature = "fuse")]
+        Commands::Mount { mount_point } => cmd_mount(&db_path, mount_point),
     }
 }
 
@@ -765,6 +767,60 @@ fn format_search_results(
             serde_json::to_string_pretty(&json).unwrap_or_default()
         }
     }
+}
+
+// ==================== FUSE Mount Command ====================
+
+/// Mounts the RLM database as a FUSE filesystem.
+///
+/// This function blocks until the filesystem is unmounted (via `fusermount -u`).
+#[cfg(feature = "fuse")]
+fn cmd_mount(db_path: &std::path::Path, mount_point: &std::path::Path) -> Result<String> {
+    use std::io::Write as _;
+
+    // Verify mount point exists and is a directory
+    if !mount_point.exists() {
+        return Err(CommandError::ExecutionFailed(format!(
+            "Mount point does not exist: {}",
+            mount_point.display()
+        ))
+        .into());
+    }
+
+    if !mount_point.is_dir() {
+        return Err(CommandError::ExecutionFailed(format!(
+            "Mount point is not a directory: {}",
+            mount_point.display()
+        ))
+        .into());
+    }
+
+    // Open storage
+    let storage = open_storage(db_path)?;
+
+    // Print startup message (before blocking)
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    let _ = writeln!(
+        handle,
+        "Mounting RLM filesystem at: {}",
+        mount_point.display()
+    );
+    let _ = writeln!(handle, "Database: {}", db_path.display());
+    let _ = writeln!(
+        handle,
+        "Press Ctrl+C or run 'fusermount -u {}' to unmount.",
+        mount_point.display()
+    );
+    drop(handle);
+
+    // Mount the filesystem (blocks until unmounted)
+    crate::fuse::mount(storage, mount_point)?;
+
+    Ok(format!(
+        "Unmounted RLM filesystem from: {}\n",
+        mount_point.display()
+    ))
 }
 
 // ==================== Chunk Commands ====================

@@ -25,6 +25,8 @@ pub mod cli;
 pub mod core;
 pub mod embedding;
 pub mod error;
+#[cfg(feature = "fuse")]
+pub mod fuse;
 pub mod io;
 pub mod search;
 pub mod storage;
@@ -57,3 +59,7 @@ pub use search::{
     buffer_fully_embedded, embed_buffer_chunks, hybrid_search, reciprocal_rank_fusion, search_bm25,
     search_semantic, weighted_rrf,
 };
+
+// Re-export FUSE types (feature-gated)
+#[cfg(feature = "fuse")]
+pub use fuse::{RlmFs, mount};

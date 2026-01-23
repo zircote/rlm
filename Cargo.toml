@@ -1,6 +1,6 @@
 [package]
 name = "rlm-rs"
-version = "1.2.3"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Recursive Language Model (RLM) REPL for Claude Code - handles long-context tasks via chunking and recursive sub-LLM calls"
@@ -52,6 +52,11 @@ fastembed = { version = "5", optional = true, default-features = false, features
 
 # usearch HNSW vector search (optional - BM25-only fallback if not available)
 usearch = { version = "2.21", optional = true }
+
+# FUSE filesystem (optional - for virtual filesystem interface)
+# libfuse feature required for macOS (macFUSE) support
+fuser = { version = "0.16", optional = true, features = ["libfuse"] }
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 # Testing
@@ -127,3 +132,5 @@ fastembed-embeddings = ["dep:fastembed"]
 usearch-hnsw = ["dep:usearch"]
 # Full semantic search (embeddings + vector search)
 full-search = ["fastembed-embeddings", "usearch-hnsw"]
+# FUSE virtual filesystem interface
+fuse = ["dep:fuser", "dep:libc"]

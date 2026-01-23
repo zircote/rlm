@@ -254,6 +254,15 @@ pub enum Commands {
     /// Chunk operations (get, list, embed).
     #[command(subcommand)]
     Chunk(ChunkCommands),
+
+    /// Mount a FUSE virtual filesystem (requires --features fuse).
+    ///
+    /// Exposes buffers, chunks, embeddings, and search interface as files.
+    #[cfg(feature = "fuse")]
+    Mount {
+        /// Directory to mount the filesystem at.
+        mount_point: PathBuf,
+    },
 }
 
 /// Chunk subcommands for pass-by-reference retrieval.
