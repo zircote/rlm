@@ -556,7 +556,6 @@ mod tests {
 
     #[test]
     #[cfg(feature = "usearch-hnsw")]
-    #[ignore = "usearch causes segfault on cleanup"]
     fn test_hnsw_new_usearch() {
         let config = HnswConfig::with_dimensions(128);
         let result = HnswIndex::new(&config);
@@ -570,11 +569,7 @@ mod tests {
     mod usearch_tests {
         use super::*;
 
-        // Note: usearch tests are ignored by default due to segfaults during
-        // cleanup on some platforms. Run with --ignored to test usearch functionality.
-
         #[test]
-        #[ignore = "usearch causes segfault on cleanup - run manually with --ignored"]
         fn test_hnsw_add_and_search() {
             let config = HnswConfig::with_dimensions(4);
             let mut index = HnswIndex::new(&config).unwrap();
@@ -597,7 +592,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "usearch causes segfault on cleanup"]
         fn test_hnsw_remove() {
             let config = HnswConfig::with_dimensions(4);
             let mut index = HnswIndex::new(&config).unwrap();
@@ -617,7 +611,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "usearch causes segfault on cleanup"]
         fn test_hnsw_dimension_mismatch() {
             let config = HnswConfig::with_dimensions(4);
             let mut index = HnswIndex::new(&config).unwrap();
@@ -628,7 +621,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "usearch causes segfault on cleanup"]
         fn test_hnsw_clear() {
             let config = HnswConfig::with_dimensions(4);
             let mut index = HnswIndex::new(&config).unwrap();
@@ -642,7 +634,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "usearch causes segfault on cleanup"]
         fn test_hnsw_update_existing() {
             let config = HnswConfig::with_dimensions(4);
             let mut index = HnswIndex::new(&config).unwrap();
