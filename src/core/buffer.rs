@@ -3,6 +3,7 @@
 //! Buffers represent text content loaded into the RLM system, typically
 //! from files or direct input. Each buffer can be chunked for processing.
 
+use crate::io::{current_timestamp, find_char_boundary};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -264,29 +265,6 @@ fn infer_content_type(path: &std::path::Path) -> Option<String> {
         .map(str::to_lowercase)
 }
 
-/// Finds a valid UTF-8 character boundary at or before the given position.
-const fn find_char_boundary(s: &str, pos: usize) -> usize {
-    if pos >= s.len() {
-        return s.len();
-    }
-    let bytes = s.as_bytes();
-    let mut boundary = pos;
-    // UTF-8 continuation bytes start with 10xxxxxx (0x80-0xBF)
-    while boundary > 0 && (bytes[boundary] & 0xC0) == 0x80 {
-        boundary -= 1;
-    }
-    boundary
-}
-
-/// Returns the current Unix timestamp in seconds.
-#[allow(clippy::cast_possible_wrap)]
-fn current_timestamp() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -380,18 +358,6 @@ mod tests {
         let mut buffer2 = Buffer::from_content("Hello".to_string());
         buffer2.compute_hash();
         assert_eq!(buffer.metadata.content_hash, buffer2.metadata.content_hash);
-    }
-
-    #[test]
-    fn test_find_char_boundary() {
-        let s = "Hello, 世界!";
-        // ASCII characters
-        assert_eq!(find_char_boundary(s, 5), 5);
-        // Multi-byte character boundary
-        assert_eq!(find_char_boundary(s, 7), 7); // Before '世'
-        // Middle of multi-byte character
-        assert_eq!(find_char_boundary(s, 8), 7); // Backs up to valid boundary
-        assert_eq!(find_char_boundary(s, 9), 7);
     }
 
     #[test]

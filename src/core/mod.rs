@@ -9,5 +9,5 @@ pub mod chunk;
 pub mod context;
 
 pub use buffer::{Buffer, BufferMetadata};
-pub use chunk::{Chunk, ChunkMetadata};
+pub use chunk::{Chunk, ChunkMetadata, estimate_tokens_for_text};
 pub use context::{Context, ContextValue};

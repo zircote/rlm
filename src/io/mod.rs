@@ -7,4 +7,4 @@ pub mod reader;
 pub mod unicode;
 
 pub use reader::{FileReader, read_file, read_file_mmap, write_chunks, write_file};
-pub use unicode::{find_char_boundary, validate_utf8};
+pub use unicode::{current_timestamp, find_char_boundary, validate_utf8};

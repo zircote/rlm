@@ -3,6 +3,7 @@
 //! Represents the stateful environment for RLM operations, including
 //! variables, globals, and active buffer references.
 
+use crate::io::current_timestamp;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -294,15 +295,6 @@ impl<T: Into<ContextValue>> From<Option<T>> for ContextValue {
     fn from(opt: Option<T>) -> Self {
         opt.map_or(Self::Null, Into::into)
     }
-}
-
-/// Returns the current Unix timestamp in seconds.
-#[allow(clippy::cast_possible_wrap)]
-fn current_timestamp() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
 }
 
 #[cfg(test)]

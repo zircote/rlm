@@ -221,6 +221,27 @@ pub fn split_sentences(s: &str) -> Vec<&str> {
     sentences
 }
 
+/// Returns the current Unix timestamp in seconds.
+///
+/// Used for timestamping buffers, chunks, and other entities.
+///
+/// # Examples
+///
+/// ```
+/// use rlm_rs::io::current_timestamp;
+///
+/// let ts = current_timestamp();
+/// assert!(ts > 0);
+/// ```
+#[allow(clippy::cast_possible_wrap)]
+#[must_use]
+pub fn current_timestamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
