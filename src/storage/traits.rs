@@ -11,7 +11,11 @@ use serde::Serialize;
 ///
 /// Implementations handle storage of RLM state including contexts,
 /// buffers, and chunks. All operations should be atomic where appropriate.
-pub trait Storage: Send + Sync {
+///
+/// Note: This trait does not require `Send + Sync` as rlm-rs is a
+/// single-threaded CLI application. Implementations are not guaranteed
+/// to be thread-safe.
+pub trait Storage {
     /// Initializes storage (creates schema, runs migrations).
     ///
     /// Should be idempotent - safe to call multiple times.

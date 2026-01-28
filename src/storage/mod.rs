@@ -9,7 +9,7 @@ pub mod sqlite;
 pub mod traits;
 
 pub use schema::{CURRENT_SCHEMA_VERSION, SCHEMA_SQL};
-pub use sqlite::SqliteStorage;
+pub use sqlite::{EmbeddingStats, SqliteStorage};
 pub use traits::Storage;
 
 /// Default database file name.

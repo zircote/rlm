@@ -687,6 +687,68 @@ impl SqliteStorage {
         }))
     }
 
+    /// Gets the distinct model names used for embeddings in a buffer.
+    ///
+    /// Returns the set of model names used to generate embeddings for
+    /// chunks belonging to the specified buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_embedding_models(&self, buffer_id: i64) -> Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                r"
+                SELECT DISTINCT ce.model_name
+                FROM chunk_embeddings ce
+                JOIN chunks c ON ce.chunk_id = c.id
+                WHERE c.buffer_id = ? AND ce.model_name IS NOT NULL
+                ",
+            )
+            .map_err(StorageError::from)?;
+
+        let models = stmt
+            .query_map(params![buffer_id], |row| row.get::<_, String>(0))
+            .map_err(StorageError::from)?
+            .filter_map(std::result::Result::ok)
+            .collect();
+
+        Ok(models)
+    }
+
+    /// Gets the count of embeddings by model name for a buffer.
+    ///
+    /// Returns a list of (`model_name`, count) pairs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_embedding_model_counts(&self, buffer_id: i64) -> Result<Vec<(Option<String>, i64)>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                r"
+                SELECT ce.model_name, COUNT(*) as count
+                FROM chunk_embeddings ce
+                JOIN chunks c ON ce.chunk_id = c.id
+                WHERE c.buffer_id = ?
+                GROUP BY ce.model_name
+                ",
+            )
+            .map_err(StorageError::from)?;
+
+        let counts = stmt
+            .query_map(params![buffer_id], |row| {
+                Ok((row.get::<_, Option<String>>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(StorageError::from)?
+            .filter_map(std::result::Result::ok)
+            .collect();
+
+        Ok(counts)
+    }
+
     /// Stores embeddings for multiple chunks in a batch.
     ///
     /// # Errors
@@ -853,15 +915,191 @@ impl SqliteStorage {
             .map_err(StorageError::from)?;
         Ok(count > 0)
     }
+
+    /// Gets chunk IDs that need embedding (either no embedding or wrong model).
+    ///
+    /// This is used for incremental embedding updates. Returns chunks that:
+    /// - Have no embedding at all, OR
+    /// - Have an embedding with a different model name (if `current_model` is provided)
+    ///
+    /// # Arguments
+    ///
+    /// * `buffer_id` - The buffer to check.
+    /// * `current_model` - Optional model name to check against. If provided,
+    ///   chunks with different models are included.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_chunks_needing_embedding(
+        &self,
+        buffer_id: i64,
+        current_model: Option<&str>,
+    ) -> Result<Vec<i64>> {
+        let mut results = Vec::new();
+
+        // Get chunks without any embedding
+        let mut stmt = self
+            .conn
+            .prepare(
+                r"
+                SELECT c.id FROM chunks c
+                LEFT JOIN chunk_embeddings e ON c.id = e.chunk_id
+                WHERE c.buffer_id = ? AND e.chunk_id IS NULL
+                ",
+            )
+            .map_err(StorageError::from)?;
+
+        let rows = stmt
+            .query_map(params![buffer_id], |row| row.get(0))
+            .map_err(StorageError::from)?;
+
+        for row in rows {
+            results.push(row.map_err(StorageError::from)?);
+        }
+
+        // If model specified, also get chunks with different model
+        if let Some(model) = current_model {
+            let mut stmt = self
+                .conn
+                .prepare(
+                    r"
+                    SELECT c.id FROM chunks c
+                    INNER JOIN chunk_embeddings e ON c.id = e.chunk_id
+                    WHERE c.buffer_id = ? AND (e.model_name IS NULL OR e.model_name != ?)
+                    ",
+                )
+                .map_err(StorageError::from)?;
+
+            let rows = stmt
+                .query_map(params![buffer_id, model], |row| row.get(0))
+                .map_err(StorageError::from)?;
+
+            for row in rows {
+                results.push(row.map_err(StorageError::from)?);
+            }
+        }
+
+        // Deduplicate (in case of overlap, though shouldn't happen)
+        results.sort_unstable();
+        results.dedup();
+        Ok(results)
+    }
+
+    /// Gets chunks without any embedding for a buffer.
+    ///
+    /// Simpler version of `get_chunks_needing_embedding` when model doesn't matter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_chunks_without_embedding(&self, buffer_id: i64) -> Result<Vec<i64>> {
+        self.get_chunks_needing_embedding(buffer_id, None)
+    }
+
+    /// Deletes embeddings with a specific model name.
+    ///
+    /// Useful for cleaning up embeddings from old models before re-embedding.
+    ///
+    /// # Arguments
+    ///
+    /// * `buffer_id` - The buffer to clean.
+    /// * `model_name` - The model name to match (or None to match NULL).
+    ///
+    /// # Returns
+    ///
+    /// The number of embeddings deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if deletion fails.
+    pub fn delete_embeddings_by_model(
+        &mut self,
+        buffer_id: i64,
+        model_name: Option<&str>,
+    ) -> Result<usize> {
+        let deleted = match model_name {
+            Some(name) => self
+                .conn
+                .execute(
+                    r"
+                    DELETE FROM chunk_embeddings
+                    WHERE chunk_id IN (
+                        SELECT id FROM chunks WHERE buffer_id = ?
+                    ) AND model_name = ?
+                    ",
+                    params![buffer_id, name],
+                )
+                .map_err(StorageError::from)?,
+            None => self
+                .conn
+                .execute(
+                    r"
+                    DELETE FROM chunk_embeddings
+                    WHERE chunk_id IN (
+                        SELECT id FROM chunks WHERE buffer_id = ?
+                    ) AND model_name IS NULL
+                    ",
+                    params![buffer_id],
+                )
+                .map_err(StorageError::from)?,
+        };
+        Ok(deleted)
+    }
+
+    /// Gets embedding statistics for a buffer.
+    ///
+    /// Returns counts of embedded vs total chunks, and model breakdown.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_embedding_stats(&self, buffer_id: i64) -> Result<EmbeddingStats> {
+        // Total chunks
+        let total_chunks: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM chunks WHERE buffer_id = ?",
+                params![buffer_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::from)?;
+
+        // Embedded chunks
+        let embedded_chunks: i64 = self
+            .conn
+            .query_row(
+                r"
+                SELECT COUNT(*) FROM chunk_embeddings e
+                INNER JOIN chunks c ON e.chunk_id = c.id
+                WHERE c.buffer_id = ?
+                ",
+                params![buffer_id],
+                |row| row.get(0),
+            )
+            .map_err(StorageError::from)?;
+
+        // Model counts
+        let model_counts = self.get_embedding_model_counts(buffer_id)?;
+
+        Ok(EmbeddingStats {
+            total_chunks: total_chunks as usize,
+            embedded_chunks: embedded_chunks as usize,
+            model_counts,
+        })
+    }
 }
 
-// SAFETY: SqliteStorage is only accessed from a single thread at a time.
-// The Storage trait requires Send + Sync, and we ensure thread-safety
-// through external synchronization (single-threaded CLI usage).
-#[allow(unsafe_code)]
-unsafe impl Send for SqliteStorage {}
-#[allow(unsafe_code)]
-unsafe impl Sync for SqliteStorage {}
+/// Statistics about embeddings for a buffer.
+#[derive(Debug, Clone)]
+pub struct EmbeddingStats {
+    /// Total number of chunks in the buffer.
+    pub total_chunks: usize,
+    /// Number of chunks with embeddings.
+    pub embedded_chunks: usize,
+    /// Count of embeddings by model (`model_name`, count).
+    pub model_counts: Vec<(Option<String>, i64)>,
+}
 
 #[cfg(test)]
 mod tests {
