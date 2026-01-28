@@ -106,6 +106,10 @@ impl Embedder for FallbackEmbedder {
         self.dimensions
     }
 
+    fn model_name(&self) -> &'static str {
+        "fallback-hash-v1"
+    }
+
     fn embed(&self, text: &str) -> Result<Vec<f32>> {
         Ok(self.generate_embedding(text))
     }
@@ -121,14 +125,8 @@ impl Embedder for FallbackEmbedder {
     }
 }
 
-// Implement Send + Sync (required by Embedder trait)
-// FallbackEmbedder has no interior mutability, so this is safe
-// SAFETY: FallbackEmbedder contains only Copy types (dimensions: usize)
-// with no interior mutability, making it safe to send and share across threads.
-#[allow(unsafe_code)]
-unsafe impl Send for FallbackEmbedder {}
-#[allow(unsafe_code)]
-unsafe impl Sync for FallbackEmbedder {}
+// Note: FallbackEmbedder auto-derives Send + Sync because it only contains
+// Copy types (usize) with no interior mutability.
 
 #[cfg(test)]
 mod tests {

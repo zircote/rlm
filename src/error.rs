@@ -27,6 +27,10 @@ pub enum Error {
     #[error("command error: {0}")]
     Command(#[from] CommandError),
 
+    /// Search errors.
+    #[error("search error: {0}")]
+    Search(#[from] SearchError),
+
     /// Invalid state errors.
     #[error("invalid state: {message}")]
     InvalidState {
@@ -208,6 +212,40 @@ pub enum IoError {
     /// Generic I/O error wrapper.
     #[error("I/O error: {0}")]
     Generic(String),
+}
+
+/// Search-specific errors for vector search operations.
+#[derive(Error, Debug)]
+pub enum SearchError {
+    /// HNSW index operation failed.
+    #[error("index error: {message}")]
+    IndexError {
+        /// Error message.
+        message: String,
+    },
+
+    /// Vector dimension mismatch.
+    #[error("dimension mismatch: expected {expected}, got {got}")]
+    DimensionMismatch {
+        /// Expected dimensions.
+        expected: usize,
+        /// Actual dimensions.
+        got: usize,
+    },
+
+    /// Feature not enabled.
+    #[error("feature not enabled: {feature}")]
+    FeatureNotEnabled {
+        /// Name of the required feature.
+        feature: String,
+    },
+
+    /// Query error.
+    #[error("query error: {message}")]
+    QueryError {
+        /// Error message.
+        message: String,
+    },
 }
 
 /// CLI command-specific errors.

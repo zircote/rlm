@@ -66,16 +66,15 @@ impl FastEmbedEmbedder {
         let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::BGEM3)
             .with_show_download_progress(false);
 
-        let model = fastembed::TextEmbedding::try_new(options).map_err(|e| {
-            StorageError::Transaction(format!("Failed to load embedding model: {e}"))
-        })?;
+        let model = fastembed::TextEmbedding::try_new(options)
+            .map_err(|e| StorageError::Embedding(format!("Failed to load embedding model: {e}")))?;
 
         // Store the model, ignoring if another thread beat us to it
         let _ = EMBEDDING_MODEL.set(std::sync::Mutex::new(model));
 
         // Return the (possibly other thread's) model
         EMBEDDING_MODEL.get().ok_or_else(|| {
-            StorageError::Transaction("Model initialization race condition".to_string()).into()
+            StorageError::Embedding("Model initialization race condition".to_string()).into()
         })
     }
 
@@ -91,6 +90,10 @@ impl Embedder for FastEmbedEmbedder {
         DEFAULT_DIMENSIONS
     }
 
+    fn model_name(&self) -> &'static str {
+        self.model_name
+    }
+
     fn embed(&self, text: &str) -> Result<Vec<f32>> {
         if text.is_empty() {
             return Err(crate::Error::Chunking(
@@ -101,9 +104,9 @@ impl Embedder for FastEmbedEmbedder {
         }
 
         let model = Self::get_model()?;
-        let mut model = model.lock().map_err(|e| {
-            StorageError::Transaction(format!("Failed to lock embedding model: {e}"))
-        })?;
+        let mut model = model
+            .lock()
+            .map_err(|e| StorageError::Embedding(format!("Failed to lock embedding model: {e}")))?;
 
         let texts = [text];
 
@@ -118,12 +121,12 @@ impl Embedder for FastEmbedEmbedder {
                     .map(|s| (*s).to_string())
                     .or_else(|| panic_info.downcast_ref::<String>().cloned())
                     .unwrap_or_else(|| "unknown panic".to_string());
-                StorageError::Transaction(format!("ONNX runtime panic: {panic_msg}"))
+                StorageError::Embedding(format!("ONNX runtime panic: {panic_msg}"))
             })?
-            .map_err(|e| StorageError::Transaction(format!("Embedding failed: {e}")))?;
+            .map_err(|e| StorageError::Embedding(format!("Embedding failed: {e}")))?;
 
         embeddings.into_iter().next().ok_or_else(|| {
-            StorageError::Transaction("No embedding returned from model".to_string()).into()
+            StorageError::Embedding("No embedding returned from model".to_string()).into()
         })
     }
 
@@ -141,9 +144,9 @@ impl Embedder for FastEmbedEmbedder {
         }
 
         let model = Self::get_model()?;
-        let mut model = model.lock().map_err(|e| {
-            StorageError::Transaction(format!("Failed to lock embedding model: {e}"))
-        })?;
+        let mut model = model
+            .lock()
+            .map_err(|e| StorageError::Embedding(format!("Failed to lock embedding model: {e}")))?;
 
         // Wrap ONNX runtime call in catch_unwind for graceful degradation.
         let result = catch_unwind(AssertUnwindSafe(|| model.embed(texts, None)));
@@ -155,12 +158,12 @@ impl Embedder for FastEmbedEmbedder {
                     .map(|s| (*s).to_string())
                     .or_else(|| panic_info.downcast_ref::<String>().cloned())
                     .unwrap_or_else(|| "unknown panic".to_string());
-                crate::Error::Storage(StorageError::Transaction(format!(
+                crate::Error::Storage(StorageError::Embedding(format!(
                     "ONNX runtime panic: {panic_msg}"
                 )))
             })?
             .map_err(|e| {
-                crate::Error::Storage(StorageError::Transaction(format!(
+                crate::Error::Storage(StorageError::Embedding(format!(
                     "Batch embedding failed: {e}"
                 )))
             })

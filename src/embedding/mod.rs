@@ -44,6 +44,11 @@ pub trait Embedder: Send + Sync {
     /// Returns the embedding dimensions.
     fn dimensions(&self) -> usize;
 
+    /// Returns the model name/version identifier.
+    ///
+    /// This is stored with embeddings to detect model changes.
+    fn model_name(&self) -> &'static str;
+
     /// Generates an embedding for the given text.
     ///
     /// # Errors
