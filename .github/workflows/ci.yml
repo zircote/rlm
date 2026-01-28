@@ -129,7 +129,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Install cargo-deny
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@be42d383a11754ac3e32b7c767c41454a4867b9f # v2.67.12
         with:
           tool: cargo-deny
 
@@ -176,7 +176,7 @@ jobs:
           components: llvm-tools-preview
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@542cebaaed782771e619bd5609d97659d109c492 # v2.66.7
+        uses: taiki-e/install-action@be42d383a11754ac3e32b7c767c41454a4867b9f # v2.67.12
         with:
           tool: cargo-llvm-cov
 
