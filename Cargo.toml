@@ -62,7 +62,7 @@ assert_cmd = "2.0"
 predicates = "3.1"
 
 # Benchmarking
-criterion = "0.5"
+criterion = "0.8"
 
 # [[bench]]
 # name = "chunking"
