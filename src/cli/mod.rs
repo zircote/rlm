@@ -9,4 +9,6 @@ pub mod parser;
 
 pub use commands::execute;
 pub use output::OutputFormat;
-pub use parser::{Cli, Commands};
+#[cfg(feature = "agent")]
+pub use parser::AgentCommands;
+pub use parser::{BufferCommands, ChunkCommands, Cli, Commands, ContextCommands};

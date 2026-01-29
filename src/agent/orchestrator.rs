@@ -16,6 +16,7 @@ use super::prompt::{
     ChunkContext, PromptSet, build_primary_prompt, build_subcall_prompt, build_synthesizer_prompt,
 };
 use super::provider::LlmProvider;
+use super::scaling::{DatasetProfile, compute_scaling_profile};
 use super::subcall::SubcallAgent;
 use super::synthesizer::SynthesizerAgent;
 use super::traits::execute_with_tools;
@@ -104,33 +105,38 @@ impl Orchestrator {
             plan
         };
 
-        // Resolve parameters: CLI → Plan → Config → Default
+        // Compute dataset profile for adaptive scaling
+        let dataset_profile = Self::build_dataset_profile(storage, buffer_name);
+        let scaling = compute_scaling_profile(&dataset_profile);
+
+        // Resolve parameters: CLI → Plan → Scaling → Config → Default
         let search_mode = overrides
             .search_mode
             .as_deref()
             .unwrap_or(&plan.search_mode);
         let threshold = overrides.threshold.or(plan.threshold).unwrap_or(0.3);
-        let max_chunks = overrides.max_chunks.or(plan.max_chunks).unwrap_or(0);
+        let max_chunks = overrides
+            .max_chunks
+            .or(plan.max_chunks)
+            .or(scaling.max_chunks)
+            .unwrap_or(0);
         let top_k = overrides
             .top_k
             .or(plan.top_k)
+            .or(scaling.top_k)
             .unwrap_or(self.config.search_top_k);
 
-        // Step 2: Search for relevant chunks
-        let search_results =
-            Self::search_chunks(storage, query, buffer_name, search_mode, threshold, top_k)?;
-
-        if search_results.is_empty() {
-            let buf_hint = buffer_name.map_or_else(String::new, |b| format!(" in buffer '{b}'"));
-            return Err(AgentError::NoChunks {
-                hint: format!(
-                    "Search returned 0 results{buf_hint} \
-                     (mode={search_mode}, threshold={threshold}, top_k={top_k}). \
-                     Try: lowering --threshold, switching --search-mode, \
-                     or running `rlm-rs embed` if chunks lack embeddings."
-                ),
-            });
-        }
+        // Step 2: Search for relevant chunks (with fallback across modes)
+        let cli_locked_mode = overrides.search_mode.is_some();
+        let search_results = Self::search_with_fallback(
+            storage,
+            query,
+            buffer_name,
+            search_mode,
+            threshold,
+            top_k,
+            cli_locked_mode,
+        )?;
 
         let chunks_available = search_results.len();
 
@@ -148,6 +154,7 @@ impl Orchestrator {
         }
 
         // Resolve batch_size: num_agents takes priority over batch_size
+        // Resolution: CLI → Plan → Scaling → Config → Default
         let batch_size = if let Some(agents) = overrides.num_agents {
             // ceil(chunks / agents)
             let agents = agents.max(1);
@@ -156,15 +163,26 @@ impl Orchestrator {
             overrides
                 .batch_size
                 .or(plan.batch_size)
+                .or(scaling.batch_size)
                 .unwrap_or(self.config.batch_size)
         };
+
+        // Resolve concurrency from scaling profile
+        let max_concurrency = scaling
+            .max_concurrency
+            .unwrap_or(self.config.max_concurrency);
 
         // Wrap chunks in Arc to share across fan-out tasks without cloning
         let shared_chunks: Arc<[LoadedChunk]> = Arc::from(chunks.into_boxed_slice());
 
-        // Step 4: Fan out across batches
+        // Step 4: Fan out across batches (with scaled concurrency)
         let subcall_results = self
-            .fan_out(query, Arc::clone(&shared_chunks), batch_size)
+            .fan_out(
+                query,
+                Arc::clone(&shared_chunks),
+                batch_size,
+                max_concurrency,
+            )
             .await;
 
         // Build chunk metadata lookup for stamping findings
@@ -240,6 +258,7 @@ impl Orchestrator {
 
         Ok(QueryResult {
             response,
+            scaling_tier: scaling.tier.to_string(),
             findings_count,
             findings_filtered,
             chunks_analyzed: shared_chunks.len(),
@@ -287,6 +306,60 @@ impl Orchestrator {
         let user_msg = build_primary_prompt(query, chunk_count, None, buffer_size);
         let primary = PrimaryAgent::new(&self.config, self.prompts.primary.clone());
         primary.plan(&*self.provider, &user_msg, true).await
+    }
+
+    /// Searches with automatic fallback across modes when the initial
+    /// mode returns zero results. If the CLI explicitly locked the mode,
+    /// no fallback is attempted.
+    fn search_with_fallback(
+        storage: &SqliteStorage,
+        query: &str,
+        buffer_name: Option<&str>,
+        initial_mode: &str,
+        threshold: f32,
+        top_k: usize,
+        cli_locked: bool,
+    ) -> Result<Vec<SearchResult>, AgentError> {
+        let results =
+            Self::search_chunks(storage, query, buffer_name, initial_mode, threshold, top_k)?;
+        if !results.is_empty() || cli_locked {
+            if results.is_empty() {
+                let buf_hint =
+                    buffer_name.map_or_else(String::new, |b| format!(" in buffer '{b}'"));
+                return Err(AgentError::NoChunks {
+                    hint: format!(
+                        "Search returned 0 results{buf_hint} \
+                         (mode={initial_mode}, threshold={threshold}, top_k={top_k}). \
+                         Try: lowering --threshold, switching --search-mode, \
+                         or running `rlm-rs embed` if chunks lack embeddings."
+                    ),
+                });
+            }
+            return Ok(results);
+        }
+
+        // Fallback order: hybrid → bm25 → semantic (skipping the already-tried mode)
+        let fallbacks: &[&str] = &["hybrid", "bm25", "semantic"];
+        for &mode in fallbacks {
+            if mode == initial_mode {
+                continue;
+            }
+            if let Ok(fallback) =
+                Self::search_chunks(storage, query, buffer_name, mode, threshold, top_k)
+                && !fallback.is_empty()
+            {
+                return Ok(fallback);
+            }
+        }
+
+        let buf_hint = buffer_name.map_or_else(String::new, |b| format!(" in buffer '{b}'"));
+        Err(AgentError::NoChunks {
+            hint: format!(
+                "Search returned 0 results{buf_hint} after trying all modes \
+                 (threshold={threshold}, top_k={top_k}). \
+                 Try: lowering --threshold or running `rlm-rs embed` if chunks lack embeddings."
+            ),
+        })
     }
 
     /// Searches for relevant chunks using the existing search infrastructure.
@@ -379,18 +452,51 @@ impl Orchestrator {
         (chunks, failures)
     }
 
+    /// Builds a [`DatasetProfile`] from storage metadata.
+    ///
+    /// When a buffer is specified, counts chunks and bytes for that buffer.
+    /// Otherwise returns zero (the scaling profile will use Tiny defaults,
+    /// which are conservative and safe).
+    fn build_dataset_profile(storage: &SqliteStorage, buffer_name: Option<&str>) -> DatasetProfile {
+        buffer_name.map_or(
+            DatasetProfile {
+                chunk_count: 0,
+                total_bytes: 0,
+            },
+            |name| {
+                let (chunk_count, total_bytes) = storage
+                    .get_buffer_by_name(name)
+                    .ok()
+                    .flatten()
+                    .and_then(|buf| {
+                        let id = buf.id?;
+                        let chunks = storage.get_chunks(id).ok()?;
+                        let bytes: usize = chunks.iter().map(|c| c.content.len()).sum();
+                        Some((chunks.len(), bytes))
+                    })
+                    .unwrap_or((0, 0));
+                DatasetProfile {
+                    chunk_count,
+                    total_bytes,
+                }
+            },
+        )
+    }
+
     /// Fans out subcall agents concurrently across batches.
     ///
     /// Chunk data is shared via `Arc` to avoid cloning per task.
     /// Takes an `Arc` directly to avoid re-cloning when the caller
-    /// already owns the data.
+    /// already owns the data. The `max_concurrency` parameter comes
+    /// from the adaptive scaling profile.
     async fn fan_out(
         &self,
         query: &str,
         shared_chunks: Arc<[LoadedChunk]>,
         batch_size: usize,
+        max_concurrency: usize,
     ) -> Vec<Result<SubagentResult, AgentError>> {
-        let semaphore = Arc::new(Semaphore::new(self.config.max_concurrency));
+        let semaphore = Arc::new(Semaphore::new(max_concurrency));
         let provider = Arc::clone(&self.provider);
         let config = self.config.clone();
         let query = query.to_string();

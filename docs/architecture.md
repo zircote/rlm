@@ -9,41 +9,41 @@ RLM-RS implements the Recursive Language Model (RLM) pattern from [arXiv:2512.24
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Claude Code                               │
-│  ┌─────────────────┐    ┌─────────────────┐                     │
-│  │   Root LLM      │───▶│   Sub-LLM       │                     │
-│  │ (Opus/Sonnet)   │    │   (Haiku)       │                     │
-│  └────────┬────────┘    └────────┬────────┘                     │
-│           │                      │                               │
-│           ▼                      ▼                               │
-│  ┌─────────────────────────────────────────┐                    │
-│  │              Bash Tool                   │                    │
-│  └─────────────────┬───────────────────────┘                    │
-└────────────────────┼────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                        Claude Code                                │
+│  ┌─────────────────┐    ┌─────────────────┐                       │
+│  │   Root LLM      │───▶│   Sub-LLM       │                       │
+│  │ (Opus/Sonnet)   │    │   (Haiku)       │                       │
+│  └────────┬────────┘    └────────┬────────┘                       │
+│           │                      │                                │
+│           ▼                      ▼                                │
+│  ┌─────────────────────────────────────────┐                      │
+│  │              Bash Tool                  │                      │
+│  └─────────────────┬───────────────────────┘                      │
+└────────────────────┼──────────────────────────────────────────────┘
                      │
                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        rlm-rs CLI                                │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │                      CLI Layer                               ││
-│  │  parser.rs │ commands.rs │ output.rs                        ││
-│  └─────────────────────────┬───────────────────────────────────┘│
-│                            │                                     │
-│  ┌─────────────────────────┴───────────────────────────────────┐│
-│  │                    Core Domain                               ││
-│  │  Buffer │ Chunk │ Context │ Variable                        ││
-│  └─────────────────────────┬───────────────────────────────────┘│
-│                            │                                     │
-│  ┌────────────┬────────────┴────────────┬────────────┬────────────┐│
-│  │  Chunking  │       Storage           │ Embedding  │    I/O     ││
-│  │  ─────────  │       ───────           │ ─────────  │    ───     ││
-│  │  Fixed     │       SQLite            │  BGE-M3   │   Reader   ││
-│  │  Semantic  │       FTS5 (BM25)       │ fastembed │   (mmap)   ││
-│  │  Code      │       Hybrid Search     │  (1024d)  │   Unicode  ││
-│  │  Parallel  │       HNSW (optional)   │           │            ││
-│  └────────────┴─────────────────────────┴────────────┴────────────┘│
-└─────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                        rlm-rs CLI                                 │
+│  ┌───────────────────────────────────────────────────────────────┐│
+│  │                      CLI Layer                                ││
+│  │  parser.rs │ commands.rs │ output.rs                          ││
+│  └─────────────────────────┬─────────────────────────────────────┘│
+│                            │                                      │
+│  ┌─────────────────────────┴─────────────────────────────────────┐│
+│  │                    Core Domain                                ││
+│  │  Buffer │ Chunk │ Context │ Variable                          ││
+│  └─────────────────────────┬─────────────────────────────────────┘│
+│                            │                                      │
+│  ┌────────────┬────────────┴────────────┬────────────┬───────────┐│
+│  │  Chunking  │       Storage           │ Embedding  │    I/O    ││
+│  │  ───────── │       ───────           │ ─────────  │    ─      ││
+│  │  Fixed     │       SQLite            │  BGE-M3    │   Reader  ││
+│  │  Semantic  │       FTS5 (BM25)       │ fastembed  │   (mmap)  ││
+│  │  Code      │       Hybrid Search     │  (1024d)   │   Unicode ││
+│  │  Parallel  │       HNSW (optional)   │            │           ││
+│  └────────────┴─────────────────────────┴────────────┴───────────┘│
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ## Module Structure
@@ -99,18 +99,19 @@ src/
 └── agent/           # Agentic query system (feature: "agent")
     ├── mod.rs
     ├── config.rs    # Agent configuration and builder
-    ├── orchestrator.rs  # Fan-out/collect pipeline
-    ├── primary.rs   # Primary analysis agent
-    ├── subcall.rs   # Chunk analysis subcall agent
-    ├── synthesizer.rs   # Finding synthesis agent
-    ├── executor.rs  # Tool-calling executor
-    ├── tool.rs      # Tool schema definitions
-    ├── prompt.rs    # Prompt assembly
-    ├── provider.rs  # LLM provider trait
-    ├── client.rs    # OpenAI-compatible client
-    ├── agentic_loop.rs  # Tool-calling iteration loop
     ├── finding.rs   # Finding and result types
     ├── message.rs   # Message and token types
+    ├── orchestrator.rs  # Fan-out/collect pipeline
+    ├── primary.rs   # Primary analysis agent
+    ├── prompt.rs    # Prompt assembly
+    ├── provider.rs  # LLM provider trait definitions
+    ├── providers/
+    │   ├── mod.rs   # Provider registry
+    │   └── openai.rs    # OpenAI-compatible client
+    ├── scaling.rs   # Adaptive scaling profiles for dataset-size-aware parameter tuning
+    ├── subcall.rs   # Chunk analysis subcall agent
+    ├── synthesizer.rs   # Finding synthesis agent
+    ├── tool.rs      # Tool schema definitions
     └── traits.rs    # Agent trait definition
 ```
 
@@ -424,10 +425,10 @@ pub enum Error {
 
 ### Workflow
 
-1. **Load**: Large document loaded into buffer, chunked, stored in SQLite
-2. **Index**: Root LLM queries chunk indices via `chunk-indices`
+1. **Load**: Large document loaded into buffer, chunked, stored in SQLite via `rlm-rs buffer load`
+2. **Index**: Root LLM queries chunk indices via `rlm-rs chunk indices`
 3. **Process**: Sub-LLM processes individual chunks via file reads
-4. **Aggregate**: Results stored back via `add-buffer`
+4. **Aggregate**: Results stored back via `rlm-rs buffer add`
 5. **Synthesize**: Root LLM synthesizes final result
 
 ## Performance Considerations
@@ -514,7 +515,7 @@ rlm-rs implements a hybrid search system combining multiple retrieval methods:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      Search Query                            │
+│                      Search Query                           │
 └─────────────────────────────────────────────────────────────┘
                               │
               ┌───────────────┼───────────────┐
@@ -573,6 +574,7 @@ When the `usearch-hnsw` feature is enabled:
 
 ## See Also
 
+- [Agent Guide](agent-guide.md) - Query engine pipeline, adaptive scaling, and configuration
 - [RLM-Inspired Design](rlm-inspired-design.md) - How rlm-rs builds on the RLM paper
 - [Plugin Integration](plugin-integration.md) - Claude Code plugin setup and portability
 - [CLI Reference](cli-reference.md) - Complete command documentation

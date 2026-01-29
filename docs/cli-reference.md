@@ -2,6 +2,12 @@
 
 Complete command-line interface reference for `rlm-rs`.
 
+> **Deprecated Aliases:** The following top-level commands still work but are deprecated
+> and will print a warning directing you to the new grouped syntax:
+> `load`, `list`/`ls`, `show`, `delete`/`rm`, `var`, `query`.
+> Use `rlm-rs buffer load`, `rlm-rs buffer list`, `rlm-rs buffer show`,
+> `rlm-rs buffer delete`, `rlm-rs context var`, and `rlm-rs agent query` instead.
+
 ## Global Options
 
 These options apply to all commands:
@@ -91,340 +97,6 @@ rlm-rs reset --yes
 
 ---
 
-### Buffer Operations
-
-#### `load`
-
-Load a file into a buffer with automatic chunking and embedding generation.
-
-Embeddings are automatically generated during load for semantic search support.
-
-```bash
-rlm-rs load [OPTIONS] <FILE>
-```
-
-**Arguments:**
-| Argument | Description |
-|----------|-------------|
-| `<FILE>` | Path to the file to load |
-
-**Options:**
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-n, --name <NAME>` | filename | Custom name for the buffer |
-| `-c, --chunker <STRATEGY>` | `semantic` | Chunking strategy: `fixed`, `semantic`, `code`, `parallel` |
-| `--chunk-size <SIZE>` | `3000` | Chunk size in characters (~750 tokens) |
-| `--overlap <SIZE>` | `500` | Overlap between chunks in characters |
-
-**Chunking Strategies:**
-
-| Strategy | Best For | Description |
-|----------|----------|-------------|
-| `semantic` | Markdown, prose | Splits at sentence/paragraph boundaries |
-| `code` | Source code | Language-aware chunking at function/class boundaries |
-| `fixed` | Logs, binary, raw text | Splits at exact character boundaries |
-| `parallel` | Large files (>10MB) | Multi-threaded fixed chunking |
-
-**Code Chunker Supported Languages:**
-Rust, Python, JavaScript, TypeScript, Go, Java, C/C++, Ruby, PHP
-
-**Examples:**
-```bash
-# Load with default settings (semantic chunking)
-rlm-rs load document.md
-
-# Load with custom name
-rlm-rs load document.md --name my-docs
-
-# Load with fixed chunking and custom size
-rlm-rs load logs.txt --chunker fixed --chunk-size 50000
-
-# Load large file with parallel chunking
-rlm-rs load huge-file.txt --chunker parallel --chunk-size 100000 --overlap 1000
-```
-
----
-
-#### `list` (alias: `ls`)
-
-List all buffers in the database.
-
-```bash
-rlm-rs list
-```
-
-**Example Output:**
-```
-ID  Name           Size      Chunks  Created
-1   document.md    125,432   4       2024-01-15 10:30:00
-2   config.json    2,048     1       2024-01-15 10:35:00
-3   logs.txt       1,048,576 26      2024-01-15 10:40:00
-```
-
-**JSON Output:**
-```bash
-rlm-rs list --format json
-```
-
----
-
-#### `show`
-
-Show detailed information about a specific buffer.
-
-```bash
-rlm-rs show [OPTIONS] <BUFFER>
-```
-
-**Arguments:**
-| Argument | Description |
-|----------|-------------|
-| `<BUFFER>` | Buffer ID (number) or name |
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-c, --chunks` | Include chunk details |
-
-**Examples:**
-```bash
-# Show buffer by name
-rlm-rs show document.md
-
-# Show buffer by ID
-rlm-rs show 1
-
-# Show buffer with chunk details
-rlm-rs show document.md --chunks
-```
-
----
-
-#### `delete` (alias: `rm`)
-
-Delete a buffer and its associated chunks.
-
-```bash
-rlm-rs delete [OPTIONS] <BUFFER>
-```
-
-**Arguments:**
-| Argument | Description |
-|----------|-------------|
-| `<BUFFER>` | Buffer ID or name to delete |
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-y, --yes` | Skip confirmation prompt |
-
-**Examples:**
-```bash
-# Delete with confirmation
-rlm-rs delete document.md
-
-# Delete without confirmation
-rlm-rs delete 1 --yes
-```
-
----
-
-#### `add-buffer`
-
-Create a new buffer from text content. Useful for storing intermediate results.
-
-```bash
-rlm-rs add-buffer <NAME> [CONTENT]
-```
-
-**Arguments:**
-| Argument | Description |
-|----------|-------------|
-| `<NAME>` | Name for the new buffer |
-| `[CONTENT]` | Text content (reads from stdin if omitted) |
-
-**Examples:**
-```bash
-# Add buffer with inline content
-rlm-rs add-buffer summary "This is the summary of chunk 1..."
-
-# Add buffer from stdin
-echo "Content from pipe" | rlm-rs add-buffer piped-content
-
-# Add buffer from file via stdin
-cat results.txt | rlm-rs add-buffer results
-```
-
----
-
-#### `export-buffers`
-
-Export all buffers to a file (JSON format).
-
-```bash
-rlm-rs export-buffers [OPTIONS]
-```
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-o, --output <FILE>` | Output file path (stdout if omitted) |
-| `-p, --pretty` | Pretty-print JSON output |
-
-**Examples:**
-```bash
-# Export to stdout
-rlm-rs export-buffers --format json
-
-# Export to file
-rlm-rs export-buffers --output backup.json --pretty
-```
-
----
-
-### Content Operations
-
-#### `peek`
-
-View a slice of buffer content without loading the entire buffer.
-
-```bash
-rlm-rs peek [OPTIONS] <BUFFER>
-```
-
-**Arguments:**
-| Argument | Description |
-|----------|-------------|
-| `<BUFFER>` | Buffer ID or name |
-
-**Options:**
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--start <OFFSET>` | `0` | Start offset in bytes |
-| `--end <OFFSET>` | `start + 3000` | End offset in bytes |
-
-**Examples:**
-```bash
-# View first 3000 bytes (default)
-rlm-rs peek document.md
-
-# View specific range
-rlm-rs peek document.md --start 1000 --end 5000
-
-# View from offset to default length
-rlm-rs peek document.md --start 10000
-```
-
----
-
-#### `grep`
-
-Search buffer content using regular expressions.
-
-```bash
-rlm-rs grep [OPTIONS] <BUFFER> <PATTERN>
-```
-
-**Arguments:**
-| Argument | Description |
-|----------|-------------|
-| `<BUFFER>` | Buffer ID or name |
-| `<PATTERN>` | Regular expression pattern |
-
-**Options:**
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-n, --max-matches <N>` | `20` | Maximum matches to return |
-| `-w, --window <SIZE>` | `120` | Context characters around each match |
-| `-i, --ignore-case` | | Case-insensitive search |
-
-**Examples:**
-```bash
-# Basic search
-rlm-rs grep document.md "error"
-
-# Case-insensitive search
-rlm-rs grep document.md "TODO" --ignore-case
-
-# Regex pattern with context
-rlm-rs grep logs.txt "ERROR.*timeout" --window 200 --max-matches 50
-
-# Search by buffer ID
-rlm-rs grep 1 "function.*async"
-```
-
----
-
-### Chunking Operations
-
-#### `chunk-indices`
-
-Calculate and display chunk boundaries for a buffer without writing files.
-
-```bash
-rlm-rs chunk-indices [OPTIONS] <BUFFER>
-```
-
-**Arguments:**
-| Argument | Description |
-|----------|-------------|
-| `<BUFFER>` | Buffer ID or name |
-
-**Options:**
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--chunk-size <SIZE>` | `3000` | Chunk size in characters |
-| `--overlap <SIZE>` | `500` | Overlap between chunks |
-
-**Examples:**
-```bash
-# Show chunk boundaries with defaults
-rlm-rs chunk-indices document.md
-
-# Custom chunk size
-rlm-rs chunk-indices document.md --chunk-size 20000 --overlap 1000
-```
-
----
-
-#### `write-chunks`
-
-Split a buffer into chunk files for processing.
-
-```bash
-rlm-rs write-chunks [OPTIONS] <BUFFER>
-```
-
-**Arguments:**
-| Argument | Description |
-|----------|-------------|
-| `<BUFFER>` | Buffer ID or name |
-
-**Options:**
-| Option | Default | Description |
-|--------|---------|-------------|
-| `-o, --out-dir <DIR>` | `.rlm/chunks` | Output directory |
-| `--chunk-size <SIZE>` | `3000` | Chunk size in characters |
-| `--overlap <SIZE>` | `500` | Overlap between chunks |
-| `--prefix <PREFIX>` | `chunk` | Filename prefix |
-
-**Output Files:**
-Files are named `{prefix}_{index}.txt` (e.g., `chunk_0.txt`, `chunk_1.txt`).
-
-**Examples:**
-```bash
-# Write chunks with defaults
-rlm-rs write-chunks document.md
-
-# Custom output directory and prefix
-rlm-rs write-chunks document.md --out-dir ./output --prefix doc
-
-# Custom chunk size for smaller chunks
-rlm-rs write-chunks large.txt --chunk-size 20000 --overlap 500
-```
-
----
-
 ### Search Operations
 
 #### `search`
@@ -497,69 +169,180 @@ rlm-rs --format json search "your query" --top-k 10
 
 ---
 
-### Agentic Workflow Operations
+### Buffer Operations (`buffer`)
 
-#### `query`
+All buffer operations are accessed via the `rlm-rs buffer` subcommand group.
 
-Analyze a buffer using the agentic LLM pipeline. Fans out analysis across chunks using concurrent subcall agents, then synthesizes findings into a unified report.
+#### `buffer load`
 
-> **Requires:** `agent` feature flag and an OpenAI-compatible API key.
+Load a file into a buffer with automatic chunking and embedding generation.
+
+Embeddings are automatically generated during load for semantic search support.
 
 ```bash
-rlm-rs query <QUERY> [OPTIONS]
+rlm-rs buffer load [OPTIONS] <FILE>
 ```
 
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `-b, --buffer <NAME\|ID>` | Buffer to scope the analysis |
-| `--concurrency <N>` | Maximum concurrent API calls (default: 50) |
-| `--batch-size <N>` | Chunks per subcall batch (overrides plan) |
-| `--subcall-model <MODEL>` | Model for subcall agents (e.g., `gpt-4o-mini`) |
-| `--synthesizer-model <MODEL>` | Model for the synthesizer agent |
-| `--search-mode <MODE>` | Search mode: `hybrid`, `semantic`, `bm25` |
-| `--similarity-threshold <F>` | Minimum similarity threshold (default: 0.3) |
-| `--max-chunks <N>` | Maximum chunks to analyze (0 = unlimited) |
-| `--top-k <N>` | Search depth: max results from search layer |
-| `--num-agents <N>` | Target concurrent subagents (auto-computes batch size) |
-| `--finding-threshold <LEVEL>` | Minimum relevance: `none`, `low`, `medium`, `high` |
-| `--prompt-dir <DIR>` | Directory containing prompt template files |
-| `--skip-plan` | Skip the planning step (use CLI flags directly) |
-| `-v, --verbose` | Show diagnostics: chunk IDs, batch errors, timing |
-
-**Environment Variables:**
-| Variable | Description |
+**Arguments:**
+| Argument | Description |
 |----------|-------------|
-| `OPENAI_API_KEY` or `RLM_API_KEY` | API key for the LLM provider |
-| `RLM_SUBCALL_MODEL` | Default subcall model |
-| `RLM_SYNTHESIZER_MODEL` | Default synthesizer model |
-| `RLM_PRIMARY_MODEL` | Default primary/planning model |
-| `RLM_BATCH_SIZE` | Default batch size |
-| `RLM_PROMPT_DIR` | Default prompt template directory |
+| `<FILE>` | Path to the file to load |
+
+**Options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-n, --name <NAME>` | filename | Custom name for the buffer |
+| `-c, --chunker <STRATEGY>` | `semantic` | Chunking strategy: `fixed`, `semantic`, `code`, `parallel` |
+| `--chunk-size <SIZE>` | `3000` | Chunk size in characters (~750 tokens) |
+| `--overlap <SIZE>` | `500` | Overlap between chunks in characters |
+
+**Chunking Strategies:**
+
+| Strategy | Best For | Description |
+|----------|----------|-------------|
+| `semantic` | Markdown, prose | Splits at sentence/paragraph boundaries |
+| `code` | Source code | Language-aware chunking at function/class boundaries |
+| `fixed` | Logs, binary, raw text | Splits at exact character boundaries |
+| `parallel` | Large files (>10MB) | Multi-threaded fixed chunking |
+
+**Code Chunker Supported Languages:**
+Rust, Python, JavaScript, TypeScript, Go, Java, C/C++, Ruby, PHP
 
 **Examples:**
 ```bash
-# Basic query
-OPENAI_API_KEY=sk-... rlm-rs query "explain the auth flow" --buffer api
+# Load with default settings (semantic chunking)
+rlm-rs buffer load document.md
 
-# Scoped with verbose diagnostics
-rlm-rs query "find error handling patterns" --buffer src --verbose
+# Load with custom name
+rlm-rs buffer load document.md --name my-docs
 
-# Custom model and batch size
-rlm-rs query "summarize architecture" --subcall-model gpt-4o --batch-size 5
+# Load with fixed chunking and custom size
+rlm-rs buffer load logs.txt --chunker fixed --chunk-size 50000
 
-# Skip planning for faster execution
-rlm-rs query "list all endpoints" --buffer api --skip-plan --search-mode hybrid
+# Load large file with parallel chunking
+rlm-rs buffer load huge-file.txt --chunker parallel --chunk-size 100000 --overlap 1000
 ```
 
 ---
 
-#### `update-buffer`
+#### `buffer list` (alias: `buffer ls`)
+
+List all buffers in the database.
+
+```bash
+rlm-rs buffer list
+```
+
+**Example Output:**
+```
+ID  Name           Size      Chunks  Created
+1   document.md    125,432   4       2024-01-15 10:30:00
+2   config.json    2,048     1       2024-01-15 10:35:00
+3   logs.txt       1,048,576 26      2024-01-15 10:40:00
+```
+
+**JSON Output:**
+```bash
+rlm-rs buffer list --format json
+```
+
+---
+
+#### `buffer show`
+
+Show detailed information about a specific buffer.
+
+```bash
+rlm-rs buffer show [OPTIONS] <BUFFER>
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `<BUFFER>` | Buffer ID (number) or name |
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-c, --chunks` | Include chunk details |
+
+**Examples:**
+```bash
+# Show buffer by name
+rlm-rs buffer show document.md
+
+# Show buffer by ID
+rlm-rs buffer show 1
+
+# Show buffer with chunk details
+rlm-rs buffer show document.md --chunks
+```
+
+---
+
+#### `buffer delete` (alias: `buffer rm`)
+
+Delete a buffer and its associated chunks.
+
+```bash
+rlm-rs buffer delete [OPTIONS] <BUFFER>
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `<BUFFER>` | Buffer ID or name to delete |
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-y, --yes` | Skip confirmation prompt |
+
+**Examples:**
+```bash
+# Delete with confirmation
+rlm-rs buffer delete document.md
+
+# Delete without confirmation
+rlm-rs buffer delete 1 --yes
+```
+
+---
+
+#### `buffer add`
+
+Create a new buffer from text content. Useful for storing intermediate results.
+
+```bash
+rlm-rs buffer add <NAME> [CONTENT]
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `<NAME>` | Name for the new buffer |
+| `[CONTENT]` | Text content (reads from stdin if omitted) |
+
+**Examples:**
+```bash
+# Add buffer with inline content
+rlm-rs buffer add summary "This is the summary of chunk 1..."
+
+# Add buffer from stdin
+echo "Content from pipe" | rlm-rs buffer add piped-content
+
+# Add buffer from file via stdin
+cat results.txt | rlm-rs buffer add results
+```
+
+---
+
+#### `buffer update`
 
 Update an existing buffer with new content, re-chunking and optionally re-embedding.
 
 ```bash
-rlm-rs update-buffer [OPTIONS] <BUFFER> [CONTENT]
+rlm-rs buffer update [OPTIONS] <BUFFER> [CONTENT]
 ```
 
 **Arguments:**
@@ -579,26 +362,51 @@ rlm-rs update-buffer [OPTIONS] <BUFFER> [CONTENT]
 **Examples:**
 ```bash
 # Update from stdin
-cat updated.txt | rlm-rs update-buffer main-source
+cat updated.txt | rlm-rs buffer update main-source
 
 # Update with inline content
-rlm-rs update-buffer my-buffer "new content here"
+rlm-rs buffer update my-buffer "new content here"
 
 # Update and re-embed
-rlm-rs update-buffer my-buffer --embed
+rlm-rs buffer update my-buffer --embed
 
 # Update with custom chunking
-cat new_code.rs | rlm-rs update-buffer code-buffer --strategy code
+cat new_code.rs | rlm-rs buffer update code-buffer --strategy code
 ```
 
 ---
 
-#### `dispatch`
+#### `buffer export`
 
-Split chunks into batches for parallel subagent processing. Returns batch assignments with chunk IDs for orchestrator use.
+Export all buffers to a file (JSON format).
 
 ```bash
-rlm-rs dispatch [OPTIONS] <BUFFER>
+rlm-rs buffer export [OPTIONS]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-o, --output <FILE>` | Output file path (stdout if omitted) |
+| `-p, --pretty` | Pretty-print JSON output |
+
+**Examples:**
+```bash
+# Export to stdout
+rlm-rs buffer export --format json
+
+# Export to file
+rlm-rs buffer export --output backup.json --pretty
+```
+
+---
+
+#### `buffer peek`
+
+View a slice of buffer content without loading the entire buffer.
+
+```bash
+rlm-rs buffer peek [OPTIONS] <BUFFER>
 ```
 
 **Arguments:**
@@ -609,88 +417,64 @@ rlm-rs dispatch [OPTIONS] <BUFFER>
 **Options:**
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--batch-size <N>` | `10` | Number of chunks per batch |
-| `--workers <N>` | | Number of worker batches (alternative to batch-size) |
-| `-q, --query <QUERY>` | | Filter to chunks matching this search query |
-| `--mode <MODE>` | `hybrid` | Search mode for query filtering |
-| `--threshold <SCORE>` | `0.3` | Minimum similarity threshold for filtering |
+| `--start <OFFSET>` | `0` | Start offset in bytes |
+| `--end <OFFSET>` | `start + 3000` | End offset in bytes |
 
 **Examples:**
 ```bash
-# Dispatch all chunks in batches of 10
-rlm-rs dispatch my-buffer
+# View first 3000 bytes (default)
+rlm-rs buffer peek document.md
 
-# Create 4 batches for 4 parallel workers
-rlm-rs dispatch my-buffer --workers 4
+# View specific range
+rlm-rs buffer peek document.md --start 1000 --end 5000
 
-# Only dispatch chunks relevant to a query
-rlm-rs dispatch my-buffer --query "error handling"
-
-# JSON output for orchestrator
-rlm-rs --format json dispatch my-buffer
-```
-
-**Output (JSON format):**
-```json
-{
-  "buffer_id": 1,
-  "total_chunks": 42,
-  "batch_count": 5,
-  "batches": [
-    {"batch_id": 0, "chunk_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
-    {"batch_id": 1, "chunk_ids": [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}
-  ]
-}
+# View from offset to default length
+rlm-rs buffer peek document.md --start 10000
 ```
 
 ---
 
-#### `aggregate`
+#### `buffer grep`
 
-Combine findings from analyst subagents. Reads JSON findings, filters by relevance, groups, and outputs a synthesizer-ready report.
+Search buffer content using regular expressions.
 
 ```bash
-rlm-rs aggregate [OPTIONS]
+rlm-rs buffer grep [OPTIONS] <BUFFER> <PATTERN>
 ```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `<BUFFER>` | Buffer ID or name |
+| `<PATTERN>` | Regular expression pattern |
 
 **Options:**
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-b, --buffer <BUFFER>` | | Read findings from a buffer (stdin if omitted) |
-| `--min-relevance <LEVEL>` | `low` | Minimum relevance: `none`, `low`, `medium`, `high` |
-| `--group-by <FIELD>` | `relevance` | Group by: `chunk_id`, `relevance`, `none` |
-| `--sort-by <FIELD>` | `relevance` | Sort by: `relevance`, `chunk_id`, `findings_count` |
-| `-o, --output-buffer <NAME>` | | Store results in a new buffer |
-
-**Input Format (JSON array of analyst findings):**
-```json
-[
-  {"chunk_id": 12, "relevance": "high", "findings": ["Bug found"], "summary": "Critical issue"},
-  {"chunk_id": 27, "relevance": "medium", "findings": ["Minor issue"], "summary": "Needs review"}
-]
-```
+| `-n, --max-matches <N>` | `20` | Maximum matches to return |
+| `-w, --window <SIZE>` | `120` | Context characters around each match |
+| `-i, --ignore-case` | | Case-insensitive search |
 
 **Examples:**
 ```bash
-# Aggregate from stdin
-cat findings.json | rlm-rs aggregate
+# Basic search
+rlm-rs buffer grep document.md "error"
 
-# Read from buffer
-rlm-rs aggregate --buffer analyst-findings
+# Case-insensitive search
+rlm-rs buffer grep document.md "TODO" --ignore-case
 
-# Filter to high relevance only
-rlm-rs aggregate --min-relevance high
+# Regex pattern with context
+rlm-rs buffer grep logs.txt "ERROR.*timeout" --window 200 --max-matches 50
 
-# Store aggregated results
-rlm-rs aggregate --output-buffer synthesis-input
-
-# JSON output
-rlm-rs --format json aggregate
+# Search by buffer ID
+rlm-rs buffer grep 1 "function.*async"
 ```
 
 ---
 
-### Chunk Operations
+### Chunk Operations (`chunk`)
+
+All chunk operations are accessed via the `rlm-rs chunk` subcommand group.
 
 #### `chunk get`
 
@@ -747,7 +531,7 @@ rlm-rs --format json chunk list docs
 
 #### `chunk embed`
 
-Generate embeddings for buffer chunks. Note: Embeddings are automatically generated during `load`, so this is typically only needed with `--force` to re-embed.
+Generate embeddings for buffer chunks. Note: Embeddings are automatically generated during `buffer load`, so this is typically only needed with `--force` to re-embed.
 
 ```bash
 rlm-rs chunk embed [OPTIONS] <BUFFER>
@@ -796,14 +580,84 @@ logs             2     27      27
 
 ---
 
-### Variable Operations
+#### `chunk indices`
 
-#### `var`
+Calculate and display chunk boundaries for a buffer without writing files.
+
+```bash
+rlm-rs chunk indices [OPTIONS] <BUFFER>
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `<BUFFER>` | Buffer ID or name |
+
+**Options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--chunk-size <SIZE>` | `3000` | Chunk size in characters |
+| `--overlap <SIZE>` | `500` | Overlap between chunks |
+
+**Examples:**
+```bash
+# Show chunk boundaries with defaults
+rlm-rs chunk indices document.md
+
+# Custom chunk size
+rlm-rs chunk indices document.md --chunk-size 20000 --overlap 1000
+```
+
+---
+
+#### `chunk write`
+
+Split a buffer into chunk files for processing.
+
+```bash
+rlm-rs chunk write [OPTIONS] <BUFFER>
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `<BUFFER>` | Buffer ID or name |
+
+**Options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --out-dir <DIR>` | `.rlm/chunks` | Output directory |
+| `--chunk-size <SIZE>` | `3000` | Chunk size in characters |
+| `--overlap <SIZE>` | `500` | Overlap between chunks |
+| `--prefix <PREFIX>` | `chunk` | Filename prefix |
+
+**Output Files:**
+Files are named `{prefix}_{index}.txt` (e.g., `chunk_0.txt`, `chunk_1.txt`).
+
+**Examples:**
+```bash
+# Write chunks with defaults
+rlm-rs chunk write document.md
+
+# Custom output directory and prefix
+rlm-rs chunk write document.md --out-dir ./output --prefix doc
+
+# Custom chunk size for smaller chunks
+rlm-rs chunk write large.txt --chunk-size 20000 --overlap 500
+```
+
+---
+
+### Context Operations (`context`)
+
+All context variable operations are accessed via the `rlm-rs context` subcommand group.
+
+#### `context var`
 
 Manage context-scoped variables (persisted per session/context).
 
 ```bash
-rlm-rs var [OPTIONS] <NAME> [VALUE]
+rlm-rs context var [OPTIONS] <NAME> [VALUE]
 ```
 
 **Arguments:**
@@ -820,23 +674,23 @@ rlm-rs var [OPTIONS] <NAME> [VALUE]
 **Examples:**
 ```bash
 # Set a variable
-rlm-rs var current_chunk 3
+rlm-rs context var current_chunk 3
 
 # Get a variable
-rlm-rs var current_chunk
+rlm-rs context var current_chunk
 
 # Delete a variable
-rlm-rs var current_chunk --delete
+rlm-rs context var current_chunk --delete
 ```
 
 ---
 
-#### `global`
+#### `context global`
 
 Manage global variables (persisted across all contexts).
 
 ```bash
-rlm-rs global [OPTIONS] <NAME> [VALUE]
+rlm-rs context global [OPTIONS] <NAME> [VALUE]
 ```
 
 **Arguments:**
@@ -853,13 +707,193 @@ rlm-rs global [OPTIONS] <NAME> [VALUE]
 **Examples:**
 ```bash
 # Set a global variable
-rlm-rs global project_name "my-project"
+rlm-rs context global project_name "my-project"
 
 # Get a global variable
-rlm-rs global project_name
+rlm-rs context global project_name
 
 # Delete a global variable
-rlm-rs global project_name --delete
+rlm-rs context global project_name --delete
+```
+
+---
+
+### Agent Operations (`agent`)
+
+All agent operations are accessed via the `rlm-rs agent` subcommand group.
+
+> **Requires:** `agent` feature flag and an OpenAI-compatible API key.
+
+#### `agent query`
+
+Analyze a buffer using the agentic LLM pipeline. Fans out analysis across chunks using concurrent subcall agents, then synthesizes findings into a unified report.
+
+```bash
+rlm-rs agent query <QUERY> [OPTIONS]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-b, --buffer <NAME\|ID>` | Buffer to scope the analysis |
+| `--concurrency <N>` | Maximum concurrent API calls (default: 50) |
+| `--batch-size <N>` | Chunks per subcall batch (overrides plan) |
+| `--subcall-model <MODEL>` | Model for subcall agents (default: `gpt-5-mini-2025-08-07`) |
+| `--synthesizer-model <MODEL>` | Model for the synthesizer agent |
+| `--search-mode <MODE>` | Search mode: `hybrid`, `semantic`, `bm25` |
+| `--similarity-threshold <F>` | Minimum similarity threshold (default: 0.3) |
+| `--max-chunks <N>` | Maximum chunks to analyze (0 = unlimited) |
+| `--top-k <N>` | Search depth: max results from search layer |
+| `--num-agents <N>` | Target concurrent subagents (auto-computes batch size) |
+| `--finding-threshold <LEVEL>` | Minimum relevance: `none`, `low`, `medium`, `high` |
+| `--prompt-dir <DIR>` | Directory containing prompt template files |
+| `--skip-plan` | Skip the planning step (use CLI flags directly) |
+| `-v, --verbose` | Show diagnostics: chunk IDs, batch errors, timing |
+
+**Environment Variables:**
+| Variable | Description |
+|----------|-------------|
+| `OPENAI_API_KEY` or `RLM_API_KEY` | API key for the LLM provider |
+| `RLM_SUBCALL_MODEL` | Default subcall model |
+| `RLM_SYNTHESIZER_MODEL` | Default synthesizer model |
+| `RLM_PRIMARY_MODEL` | Default primary/planning model |
+| `RLM_BATCH_SIZE` | Default batch size |
+| `RLM_PROMPT_DIR` | Default prompt template directory |
+
+**Examples:**
+```bash
+# Basic query
+OPENAI_API_KEY=sk-... rlm-rs agent query "explain the auth flow" --buffer api
+
+# Scoped with verbose diagnostics
+rlm-rs agent query "find error handling patterns" --buffer src --verbose
+
+# Custom model and batch size
+rlm-rs agent query "summarize architecture" --batch-size 5
+
+# Skip planning for faster execution
+rlm-rs agent query "list all endpoints" --buffer api --skip-plan --search-mode hybrid
+```
+
+---
+
+#### `agent init-prompts`
+
+Initialize prompt template files in the specified directory for customization.
+
+```bash
+rlm-rs agent init-prompts [OPTIONS]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--prompt-dir <DIR>` | Directory to write prompt templates (default: `.rlm/prompts`) |
+
+**Examples:**
+```bash
+# Initialize prompts in default location
+rlm-rs agent init-prompts
+
+# Initialize in custom directory
+rlm-rs agent init-prompts --prompt-dir ./my-prompts
+```
+
+---
+
+#### `agent dispatch`
+
+Split chunks into batches for parallel subagent processing. Returns batch assignments with chunk IDs for orchestrator use.
+
+```bash
+rlm-rs agent dispatch [OPTIONS] <BUFFER>
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `<BUFFER>` | Buffer ID or name |
+
+**Options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--batch-size <N>` | `10` | Number of chunks per batch |
+| `--workers <N>` | | Number of worker batches (alternative to batch-size) |
+| `-q, --query <QUERY>` | | Filter to chunks matching this search query |
+| `--mode <MODE>` | `hybrid` | Search mode for query filtering |
+| `--threshold <SCORE>` | `0.3` | Minimum similarity threshold for filtering |
+
+**Examples:**
+```bash
+# Dispatch all chunks in batches of 10
+rlm-rs agent dispatch my-buffer
+
+# Create 4 batches for 4 parallel workers
+rlm-rs agent dispatch my-buffer --workers 4
+
+# Only dispatch chunks relevant to a query
+rlm-rs agent dispatch my-buffer --query "error handling"
+
+# JSON output for orchestrator
+rlm-rs --format json agent dispatch my-buffer
+```
+
+**Output (JSON format):**
+```json
+{
+  "buffer_id": 1,
+  "total_chunks": 42,
+  "batch_count": 5,
+  "batches": [
+    {"batch_id": 0, "chunk_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
+    {"batch_id": 1, "chunk_ids": [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]}
+  ]
+}
+```
+
+---
+
+#### `agent aggregate`
+
+Combine findings from analyst subagents. Reads JSON findings, filters by relevance, groups, and outputs a synthesizer-ready report.
+
+```bash
+rlm-rs agent aggregate [OPTIONS]
+```
+
+**Options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-b, --buffer <BUFFER>` | | Read findings from a buffer (stdin if omitted) |
+| `--min-relevance <LEVEL>` | `low` | Minimum relevance: `none`, `low`, `medium`, `high` |
+| `--group-by <FIELD>` | `relevance` | Group by: `chunk_id`, `relevance`, `none` |
+| `--sort-by <FIELD>` | `relevance` | Sort by: `relevance`, `chunk_id`, `findings_count` |
+| `-o, --output-buffer <NAME>` | | Store results in a new buffer |
+
+**Input Format (JSON array of analyst findings):**
+```json
+[
+  {"chunk_id": 12, "relevance": "high", "findings": ["Bug found"], "summary": "Critical issue"},
+  {"chunk_id": 27, "relevance": "medium", "findings": ["Minor issue"], "summary": "Needs review"}
+]
+```
+
+**Examples:**
+```bash
+# Aggregate from stdin
+cat findings.json | rlm-rs agent aggregate
+
+# Read from buffer
+rlm-rs agent aggregate --buffer analyst-findings
+
+# Filter to high relevance only
+rlm-rs agent aggregate --min-relevance high
+
+# Store aggregated results
+rlm-rs agent aggregate --output-buffer synthesis-input
+
+# JSON output
+rlm-rs --format json agent aggregate
 ```
 
 ---
@@ -907,10 +941,10 @@ All commands support multiple output formats via `--format`:
 rlm-rs status --format json
 
 # List buffers as JSON
-rlm-rs list --format json
+rlm-rs buffer list --format json
 
 # Search results as JSON
-rlm-rs grep document.md "pattern" --format json
+rlm-rs buffer grep document.md "pattern" --format json
 
 # NDJSON for streaming pipelines
 rlm-rs --format ndjson chunk list my-buffer
@@ -920,6 +954,7 @@ rlm-rs --format ndjson chunk list my-buffer
 
 ## See Also
 
+- [Agent Guide](agent-guide.md) - Query engine pipeline, adaptive scaling, and configuration
 - [README.md](../README.md) - Project overview and quick start
 - [Architecture](architecture.md) - Internal architecture documentation
 - [RLM Paper](https://arxiv.org/abs/2512.24601) - Recursive Language Model pattern

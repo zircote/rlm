@@ -148,7 +148,7 @@ mod tests {
         use super::super::prompt::PRIMARY_SYSTEM_PROMPT;
         let config = AgentConfig::builder()
             .api_key("test")
-            .primary_model("gpt-4o-mini")
+            .primary_model("gpt-5.2-2025-12-11")
             .build()
             .unwrap_or_else(|_| unreachable!());
         let agent = PrimaryAgent::new(&config, PRIMARY_SYSTEM_PROMPT.to_string());

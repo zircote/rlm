@@ -57,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **CLI**: Consolidated 22 flat top-level commands into `buffer`, `chunk`, `context`, and `agent` subcommand groups; old names remain as hidden deprecated aliases
+- **Agent**: Default models changed from `gpt-4o` to `gpt-5.2-2025-12-11` (primary, synthesizer) and `gpt-5-mini-2025-08-07` (subcall)
+- **Agent**: Added adaptive scaling profiles for dataset-size-aware batch and concurrency tuning
 - **Agent**: `fan_out` accepts `Arc<[LoadedChunk]>` to avoid unnecessary clone
 - **Agent**: `search_chunks` and `load_chunks` converted to associated functions
   (removed `#[allow(clippy::unused_self)]`)
@@ -79,10 +82,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Search**: USearch segfault via PR #704 move semantics fix
 - **CLI**: UTF-8 safe string truncation using `find_char_boundary` (prevents panic on multi-byte characters)
 - **CLI**: NDJSON format now emits newline-delimited single-line JSON (was identical to pretty-printed JSON)
-- **CLI**: `init`, `reset`, and `delete-buffer` commands now respect `--format json` flag
+- **CLI**: `init`, `reset`, and `buffer delete` commands now respect `--format json` flag
 - **Agent**: Unused error binding in subcall truncation handler
 - **CLI**: Redundant clone in `cmd_update_buffer` buffer construction
 - **Agent**: `get_buffer` tool schema now requires at least one property (`minProperties: 1`)
+- **Agent**: Search pipeline now falls back across modes (hybrid → bm25 → semantic) when the planner's chosen mode returns zero results
+- **Agent**: Omit `temperature` parameter for models that only support the default value
 - **Docs**: Unresolved intra-doc links in `Chunk` methods
 
 ### Security

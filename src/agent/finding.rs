@@ -79,6 +79,8 @@ pub struct SubagentResult {
 pub struct QueryResult {
     /// Synthesized markdown response.
     pub response: String,
+    /// Adaptive scaling tier used for this query.
+    pub scaling_tier: String,
     /// Total findings collected across all batches (after filtering).
     pub findings_count: usize,
     /// Findings filtered out below the relevance threshold.

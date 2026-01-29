@@ -35,6 +35,7 @@ pub mod primary;
 pub mod prompt;
 pub mod provider;
 pub mod providers;
+pub mod scaling;
 pub mod subcall;
 pub mod synthesizer;
 pub mod tool;

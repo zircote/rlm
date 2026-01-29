@@ -509,7 +509,7 @@ Enable full search capabilities with features:
 rlm-rs = "2.0"
 
 # Full search with HNSW index
-rlm-rs = { version = "1.2", features = ["full-search"] }
+rlm-rs = { version = "2.0", features = ["full-search"] }
 ```
 
 #### Generating Embeddings
@@ -809,9 +809,22 @@ fn process_document(path: &str) -> Result<()> {
 
 ---
 
+## Agent Query Engine
+
+The `agent` feature adds an LLM-powered query pipeline that analyzes buffer
+content using fan-out/collect concurrency and adaptive scaling.
+
+See the **[Agent Guide](agent-guide.md)** for the full walkthrough — how the
+pipeline works, adaptive scaling tiers, parameter tuning, configuration,
+custom prompts, and the security model.
+
+---
+
 ## See Also
 
-- [README.md](../README.md) - Project overview
-- [Architecture](architecture.md) - Internal architecture
-- [CLI Reference](cli-reference.md) - Command-line interface
-- [docs.rs/rlm-rs](https://docs.rs/rlm-rs) - Auto-generated rustdoc
+- [README.md](../README.md) — Project overview
+- [Agent Guide](agent-guide.md) — Query engine pipeline, scaling, and configuration
+- [Architecture](architecture.md) — Internal design
+- [CLI Reference](cli-reference.md) — All commands and flags
+- [Prompt Specifications](prompts/) — Agent prompt design and rationale
+- [docs.rs/rlm-rs](https://docs.rs/rlm-rs) — Generated Rust API docs (structs, traits, methods)
