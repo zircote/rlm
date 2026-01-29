@@ -16,7 +16,9 @@ use crate::cli::output::{
     GrepMatch, OutputFormat, format_buffer, format_buffer_list, format_chunk_indices,
     format_grep_matches, format_peek, format_status, format_write_chunks_result,
 };
-use crate::cli::parser::{ChunkCommands, Cli, Commands};
+#[cfg(feature = "agent")]
+use crate::cli::parser::AgentCommands;
+use crate::cli::parser::{BufferCommands, ChunkCommands, Cli, Commands, ContextCommands};
 use crate::core::{Buffer, Context, ContextValue};
 use crate::embedding::create_embedder;
 use crate::error::{CommandError, Result, StorageError};
@@ -49,95 +51,6 @@ pub fn execute(cli: &Cli) -> Result<String> {
         Commands::Init { force } => cmd_init(&db_path, *force, format),
         Commands::Status => cmd_status(&db_path, format),
         Commands::Reset { yes } => cmd_reset(&db_path, *yes, format),
-        Commands::Load {
-            file,
-            name,
-            chunker,
-            chunk_size,
-            overlap,
-        } => cmd_load(
-            &db_path,
-            file,
-            name.as_deref(),
-            chunker,
-            *chunk_size,
-            *overlap,
-            format,
-        ),
-        Commands::ListBuffers => cmd_list_buffers(&db_path, format),
-        Commands::ShowBuffer { buffer, chunks } => {
-            cmd_show_buffer(&db_path, buffer, *chunks, format)
-        }
-        Commands::DeleteBuffer { buffer, yes } => cmd_delete_buffer(&db_path, buffer, *yes, format),
-        Commands::Peek { buffer, start, end } => cmd_peek(&db_path, buffer, *start, *end, format),
-        Commands::Grep {
-            buffer,
-            pattern,
-            max_matches,
-            window,
-            ignore_case,
-        } => cmd_grep(
-            &db_path,
-            buffer,
-            pattern,
-            *max_matches,
-            *window,
-            *ignore_case,
-            format,
-        ),
-        Commands::ChunkIndices {
-            buffer,
-            chunk_size,
-            overlap,
-        } => cmd_chunk_indices(&db_path, buffer, *chunk_size, *overlap, format),
-        Commands::WriteChunks {
-            buffer,
-            out_dir,
-            chunk_size,
-            overlap,
-            prefix,
-        } => cmd_write_chunks(
-            &db_path,
-            buffer,
-            out_dir,
-            *chunk_size,
-            *overlap,
-            prefix,
-            format,
-        ),
-        Commands::AddBuffer { name, content } => {
-            cmd_add_buffer(&db_path, name, content.as_deref(), format)
-        }
-        Commands::UpdateBuffer {
-            buffer,
-            content,
-            embed,
-            strategy,
-            chunk_size,
-            overlap,
-        } => cmd_update_buffer(
-            &db_path,
-            buffer,
-            content.as_deref(),
-            *embed,
-            strategy,
-            *chunk_size,
-            *overlap,
-            format,
-        ),
-        Commands::ExportBuffers { output, pretty } => {
-            cmd_export_buffers(&db_path, output.as_deref(), *pretty, format)
-        }
-        Commands::Variable {
-            name,
-            value,
-            delete,
-        } => cmd_variable(&db_path, name, value.as_deref(), *delete, format),
-        Commands::Global {
-            name,
-            value,
-            delete,
-        } => cmd_global(&db_path, name, value.as_deref(), *delete, format),
         Commands::Search {
             query,
             top_k,
@@ -159,52 +72,248 @@ pub fn execute(cli: &Cli) -> Result<String> {
             *preview_len,
             format,
         ),
-        Commands::Aggregate {
-            buffer,
-            min_relevance,
-            group_by,
-            sort_by,
-            output_buffer,
-        } => cmd_aggregate(
-            &db_path,
-            buffer.as_deref(),
-            min_relevance,
-            group_by,
-            sort_by,
-            output_buffer.as_deref(),
-            format,
-        ),
-        Commands::Dispatch {
-            buffer,
-            batch_size,
-            workers,
-            query,
-            mode,
-            threshold,
-        } => cmd_dispatch(
-            &db_path,
-            buffer,
-            *batch_size,
-            *workers,
-            query.as_deref(),
-            mode,
-            *threshold,
-            format,
-        ),
-        Commands::Chunk(chunk_cmd) => match chunk_cmd {
-            ChunkCommands::Get { id, metadata } => cmd_chunk_get(&db_path, *id, *metadata, format),
-            ChunkCommands::List {
-                buffer,
-                preview,
-                preview_len,
-            } => cmd_chunk_list(&db_path, buffer, *preview, *preview_len, format),
-            ChunkCommands::Embed { buffer, force } => {
-                cmd_chunk_embed(&db_path, buffer, *force, format)
-            }
-            ChunkCommands::Status => cmd_chunk_status(&db_path, format),
-        },
+
+        // ── Buffer subcommands ──────────────────────────────────
+        Commands::Buffer(sub) => execute_buffer(sub, &db_path, format),
+
+        // ── Chunk subcommands ───────────────────────────────────
+        Commands::Chunk(sub) => execute_chunk(sub, &db_path, format),
+
+        // ── Context subcommands ─────────────────────────────────
+        Commands::Context(sub) => execute_context(sub, &db_path, format),
+
+        // ── Agent subcommands ───────────────────────────────────
         #[cfg(feature = "agent")]
-        Commands::Query {
+        Commands::Agent(sub) => execute_agent(sub, &db_path, format),
+
+        // ── Deprecated top-level aliases ────────────────────────
+        // Hidden from --help. Print a deprecation warning to stderr.
+        Commands::Load {
+            file,
+            name,
+            chunker,
+            chunk_size,
+            overlap,
+        } => {
+            deprecation_warning("load", "buffer load");
+            cmd_load(
+                &db_path,
+                file,
+                name.as_deref(),
+                chunker,
+                *chunk_size,
+                *overlap,
+                format,
+            )
+        }
+        Commands::ListBuffers => {
+            deprecation_warning("list", "buffer list");
+            cmd_list_buffers(&db_path, format)
+        }
+        Commands::ShowBuffer { buffer, chunks } => {
+            deprecation_warning("show", "buffer show");
+            cmd_show_buffer(&db_path, buffer, *chunks, format)
+        }
+        Commands::DeleteBuffer { buffer, yes } => {
+            deprecation_warning("delete", "buffer delete");
+            cmd_delete_buffer(&db_path, buffer, *yes, format)
+        }
+        Commands::Variable {
+            name,
+            value,
+            delete,
+        } => {
+            deprecation_warning("var", "context var");
+            cmd_variable(&db_path, name, value.as_deref(), *delete, format)
+        }
+        #[cfg(feature = "agent")]
+        Commands::LegacyQuery {
+            query,
+            buffer,
+            concurrency,
+            batch_size,
+            subcall_model,
+            synthesizer_model,
+            search_mode,
+            similarity_threshold,
+            max_chunks,
+            top_k,
+            num_agents,
+            finding_threshold,
+            skip_plan,
+            prompt_dir,
+            verbose,
+        } => {
+            deprecation_warning("query", "agent query");
+            cmd_query(
+                &db_path,
+                query,
+                buffer.as_deref(),
+                *concurrency,
+                *batch_size,
+                subcall_model.as_deref(),
+                synthesizer_model.as_deref(),
+                search_mode.as_deref(),
+                *similarity_threshold,
+                *max_chunks,
+                *top_k,
+                *num_agents,
+                finding_threshold.as_deref(),
+                *skip_plan,
+                prompt_dir.as_deref(),
+                *verbose,
+                format,
+            )
+        }
+    }
+}
+
+/// Writes a deprecation warning to stderr for hidden legacy aliases.
+fn deprecation_warning(old: &str, new: &str) {
+    let _ = writeln!(
+        io::stderr(),
+        "Warning: 'rlm-rs {old}' is deprecated. Use 'rlm-rs {new}' instead."
+    );
+}
+
+/// Dispatches buffer subcommands.
+fn execute_buffer(
+    sub: &BufferCommands,
+    db_path: &std::path::Path,
+    format: OutputFormat,
+) -> Result<String> {
+    match sub {
+        BufferCommands::Load {
+            file,
+            name,
+            chunker,
+            chunk_size,
+            overlap,
+        } => cmd_load(
+            db_path,
+            file,
+            name.as_deref(),
+            chunker,
+            *chunk_size,
+            *overlap,
+            format,
+        ),
+        BufferCommands::List => cmd_list_buffers(db_path, format),
+        BufferCommands::Show { buffer, chunks } => {
+            cmd_show_buffer(db_path, buffer, *chunks, format)
+        }
+        BufferCommands::Delete { buffer, yes } => cmd_delete_buffer(db_path, buffer, *yes, format),
+        BufferCommands::Add { name, content } => {
+            cmd_add_buffer(db_path, name, content.as_deref(), format)
+        }
+        BufferCommands::Update {
+            buffer,
+            content,
+            embed,
+            strategy,
+            chunk_size,
+            overlap,
+        } => cmd_update_buffer(
+            db_path,
+            buffer,
+            content.as_deref(),
+            *embed,
+            strategy,
+            *chunk_size,
+            *overlap,
+            format,
+        ),
+        BufferCommands::Export { output, pretty } => {
+            cmd_export_buffers(db_path, output.as_deref(), *pretty, format)
+        }
+        BufferCommands::Peek { buffer, start, end } => {
+            cmd_peek(db_path, buffer, *start, *end, format)
+        }
+        BufferCommands::Grep {
+            buffer,
+            pattern,
+            max_matches,
+            window,
+            ignore_case,
+        } => cmd_grep(
+            db_path,
+            buffer,
+            pattern,
+            *max_matches,
+            *window,
+            *ignore_case,
+            format,
+        ),
+    }
+}
+
+/// Dispatches chunk subcommands.
+fn execute_chunk(
+    sub: &ChunkCommands,
+    db_path: &std::path::Path,
+    format: OutputFormat,
+) -> Result<String> {
+    match sub {
+        ChunkCommands::Get { id, metadata } => cmd_chunk_get(db_path, *id, *metadata, format),
+        ChunkCommands::List {
+            buffer,
+            preview,
+            preview_len,
+        } => cmd_chunk_list(db_path, buffer, *preview, *preview_len, format),
+        ChunkCommands::Embed { buffer, force } => cmd_chunk_embed(db_path, buffer, *force, format),
+        ChunkCommands::Status => cmd_chunk_status(db_path, format),
+        ChunkCommands::Indices {
+            buffer,
+            chunk_size,
+            overlap,
+        } => cmd_chunk_indices(db_path, buffer, *chunk_size, *overlap, format),
+        ChunkCommands::Write {
+            buffer,
+            out_dir,
+            chunk_size,
+            overlap,
+            prefix,
+        } => cmd_write_chunks(
+            db_path,
+            buffer,
+            out_dir,
+            *chunk_size,
+            *overlap,
+            prefix,
+            format,
+        ),
+    }
+}
+
+/// Dispatches context subcommands.
+fn execute_context(
+    sub: &ContextCommands,
+    db_path: &std::path::Path,
+    format: OutputFormat,
+) -> Result<String> {
+    match sub {
+        ContextCommands::Var {
+            name,
+            value,
+            delete,
+        } => cmd_variable(db_path, name, value.as_deref(), *delete, format),
+        ContextCommands::Global {
+            name,
+            value,
+            delete,
+        } => cmd_global(db_path, name, value.as_deref(), *delete, format),
+    }
+}
+
+/// Dispatches agent subcommands.
+#[cfg(feature = "agent")]
+fn execute_agent(
+    sub: &AgentCommands,
+    db_path: &std::path::Path,
+    format: OutputFormat,
+) -> Result<String> {
+    match sub {
+        AgentCommands::Query {
             query,
             buffer,
             concurrency,
@@ -221,7 +330,7 @@ pub fn execute(cli: &Cli) -> Result<String> {
             prompt_dir,
             verbose,
         } => cmd_query(
-            &db_path,
+            db_path,
             query,
             buffer.as_deref(),
             *concurrency,
@@ -239,8 +348,39 @@ pub fn execute(cli: &Cli) -> Result<String> {
             *verbose,
             format,
         ),
-        #[cfg(feature = "agent")]
-        Commands::InitPrompts { dir } => cmd_init_prompts(dir.as_deref(), format),
+        AgentCommands::InitPrompts { dir } => cmd_init_prompts(dir.as_deref(), format),
+        AgentCommands::Dispatch {
+            buffer,
+            batch_size,
+            workers,
+            query,
+            mode,
+            threshold,
+        } => cmd_dispatch(
+            db_path,
+            buffer,
+            *batch_size,
+            *workers,
+            query.as_deref(),
+            mode,
+            *threshold,
+            format,
+        ),
+        AgentCommands::Aggregate {
+            buffer,
+            min_relevance,
+            group_by,
+            sort_by,
+            output_buffer,
+        } => cmd_aggregate(
+            db_path,
+            buffer.as_deref(),
+            min_relevance,
+            group_by,
+            sort_by,
+            output_buffer.as_deref(),
+            format,
+        ),
     }
 }
 
@@ -785,13 +925,15 @@ fn cmd_update_buffer(
     }
 }
 
+#[cfg(feature = "agent")]
 use crate::core::Relevance;
 
 /// Analyst finding from a subagent.
 ///
-/// Mirrors `agent::finding::Finding` but is available without the `agent`
-/// feature gate. Kept as a separate type so `cmd_aggregate` works
-/// unconditionally.
+/// Mirrors `agent::finding::Finding` but kept as a separate type
+/// so `cmd_aggregate` works independently of the agent module's
+/// internal types.
+#[cfg(feature = "agent")]
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 struct AnalystFinding {
     chunk_id: i64,
@@ -804,6 +946,7 @@ struct AnalystFinding {
     follow_up: Vec<String>,
 }
 
+#[cfg(feature = "agent")]
 fn cmd_aggregate(
     db_path: &std::path::Path,
     buffer: Option<&str>,
@@ -1047,6 +1190,7 @@ fn cmd_global(
 
 // ==================== Dispatch Command ====================
 
+#[cfg(feature = "agent")]
 #[allow(clippy::too_many_arguments)]
 fn cmd_dispatch(
     db_path: &std::path::Path,
@@ -1770,7 +1914,8 @@ fn cmd_query(
                     String::new()
                 };
                 output.push_str(&format!(
-                    "\n\n---\nChunks: {}/{} analyzed{load_hint} | Findings: {}{filtered_hint} | Batches: {} ok, {} failed | Tokens: {} | Time: {:.1}s",
+                    "\n\n---\nScale: {} | Chunks: {}/{} analyzed{load_hint} | Findings: {}{filtered_hint} | Batches: {} ok, {} failed | Tokens: {} | Time: {:.1}s",
+                    query_result.scaling_tier,
                     query_result.chunks_analyzed,
                     query_result.chunks_available,
                     query_result.findings_count,

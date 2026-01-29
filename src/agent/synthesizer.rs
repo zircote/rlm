@@ -79,13 +79,13 @@ mod tests {
         use super::super::prompt::SYNTHESIZER_SYSTEM_PROMPT;
         let config = AgentConfig::builder()
             .api_key("test")
-            .synthesizer_model("gpt-4o")
+            .synthesizer_model("gpt-5.2-2025-12-11")
             .synthesizer_max_tokens(8192)
             .build()
             .unwrap_or_else(|_| unreachable!());
         let agent = SynthesizerAgent::new(&config, SYNTHESIZER_SYSTEM_PROMPT.to_string());
         assert_eq!(agent.name(), "synthesizer");
-        assert_eq!(agent.model(), "gpt-4o");
+        assert_eq!(agent.model(), "gpt-5.2-2025-12-11");
         assert!(!agent.json_mode());
         assert!((agent.temperature() - 0.1).abs() < f32::EPSILON);
         assert_eq!(agent.max_tokens(), 8192);

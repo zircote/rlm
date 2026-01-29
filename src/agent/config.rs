@@ -288,11 +288,15 @@ impl AgentConfigBuilder {
             provider: self.provider.unwrap_or_else(|| "openai".to_string()),
             api_key,
             base_url: self.base_url,
-            subcall_model: self.subcall_model.unwrap_or_else(|| "gpt-4o".to_string()),
+            subcall_model: self
+                .subcall_model
+                .unwrap_or_else(|| "gpt-5-mini-2025-08-07".to_string()),
             synthesizer_model: self
                 .synthesizer_model
-                .unwrap_or_else(|| "gpt-4o".to_string()),
-            primary_model: self.primary_model.unwrap_or_else(|| "gpt-4o".to_string()),
+                .unwrap_or_else(|| "gpt-5.2-2025-12-11".to_string()),
+            primary_model: self
+                .primary_model
+                .unwrap_or_else(|| "gpt-5.2-2025-12-11".to_string()),
             max_concurrency: self.max_concurrency.unwrap_or(DEFAULT_MAX_CONCURRENCY),
             batch_size: self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE),
             subcall_max_tokens: self
@@ -332,7 +336,7 @@ mod tests {
         assert_eq!(config.api_key, "test-key");
         assert_eq!(config.max_concurrency, DEFAULT_MAX_CONCURRENCY);
         assert_eq!(config.batch_size, DEFAULT_BATCH_SIZE);
-        assert_eq!(config.subcall_model, "gpt-4o");
+        assert_eq!(config.subcall_model, "gpt-5-mini-2025-08-07");
     }
 
     #[test]

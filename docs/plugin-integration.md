@@ -29,7 +29,7 @@ User-invocable shortcuts for common operations:
 
 | Command | Description | Maps To |
 |---------|-------------|---------|
-| `/rlm-load` | Load file into RLM | `rlm-rs load <file>` |
+| `/rlm-load` | Load file into RLM | `rlm-rs buffer load <file>` |
 | `/rlm-search` | Search loaded content | `rlm-rs search <query>` |
 | `/rlm-status` | Show RLM state | `rlm-rs status` |
 | `/rlm-analyze` | Full RLM analysis workflow | Orchestrated multi-step |
@@ -55,7 +55,7 @@ Load content into RLM for semantic search and chunk-based analysis.
 
 1. Check if rlm-rs is installed: `which rlm-rs`
 2. Initialize if needed: `rlm-rs init`
-3. Load the content: `rlm-rs load {{path}} --name {{name}} --chunker semantic`
+3. Load the content: `rlm-rs buffer load {{path}} --name {{name}} --chunker semantic`
 4. Report status: `rlm-rs status --format json`
 
 ## Output
@@ -154,7 +154,7 @@ Any AI assistant can integrate with rlm-rs using these patterns:
 
 ```bash
 # 1. Load content (one-time setup)
-rlm-rs load large-document.md --name docs
+rlm-rs buffer load large-document.md --name docs
 
 # 2. Search for relevant chunks
 RESULTS=$(rlm-rs --format json search "your query" --top-k 5)
@@ -173,10 +173,10 @@ done
 
 ```bash
 # Find specific patterns
-rlm-rs grep docs "TODO|FIXME|HACK" --format json --max-matches 50
+rlm-rs buffer grep docs "TODO|FIXME|HACK" --format json --max-matches 50
 
 # Get context around matches
-rlm-rs grep docs "error.*handling" --window 200
+rlm-rs buffer grep docs "error.*handling" --window 200
 ```
 
 #### Pattern 3: Progressive Refinement
@@ -251,7 +251,7 @@ All commands with `--format json` return structured data:
 Copilot can invoke rlm-rs through its terminal integration:
 
 ```
-@terminal rlm-rs load src/ --name code
+@terminal rlm-rs buffer load src/ --name code
 @terminal rlm-rs search "error handling"
 ```
 
@@ -261,7 +261,7 @@ Codex can execute rlm-rs commands directly:
 
 ```bash
 codex "Load the documentation and find sections about API authentication"
-# Codex runs: rlm-rs load docs/ && rlm-rs search "API authentication"
+# Codex runs: rlm-rs buffer load docs/ && rlm-rs search "API authentication"
 ```
 
 ### OpenCode / Aider
@@ -312,7 +312,7 @@ async function searchRLM(query: string): Promise<SearchResult[]> {
 ### 1. Use Semantic Chunking for Code
 
 ```bash
-rlm-rs load src/ --chunker semantic --chunk-size 3000
+rlm-rs buffer load src/ --chunker semantic --chunk-size 3000
 ```
 
 Semantic chunking respects function and class boundaries.
@@ -320,9 +320,9 @@ Semantic chunking respects function and class boundaries.
 ### 2. Name Buffers Meaningfully
 
 ```bash
-rlm-rs load src/auth/ --name auth-module
-rlm-rs load src/api/ --name api-handlers
-rlm-rs load docs/ --name documentation
+rlm-rs buffer load src/auth/ --name auth-module
+rlm-rs buffer load src/api/ --name api-handlers
+rlm-rs buffer load docs/ --name documentation
 ```
 
 This makes search results more interpretable.
@@ -353,10 +353,10 @@ Task(rlm-subcall, chunk 33)
 
 ```bash
 # After subcall analysis
-rlm-rs add-buffer auth-analysis "$(cat subcall-results.json)"
+rlm-rs buffer add auth-analysis "$(cat subcall-results.json)"
 
 # Later retrieval
-rlm-rs show auth-analysis
+rlm-rs buffer show auth-analysis
 ```
 
 ---
@@ -385,11 +385,11 @@ With JSON format, errors are structured:
 | Error Message | Cause | Recovery Strategy |
 |---------------|-------|-------------------|
 | `RLM not initialized` | Database not created | Run `rlm-rs init` |
-| `buffer not found: <name>` | Buffer doesn't exist | Run `rlm-rs list` to verify |
+| `buffer not found: <name>` | Buffer doesn't exist | Run `rlm-rs buffer list` to verify |
 | `chunk not found: <id>` | Invalid chunk ID | Re-run search to get valid IDs |
 | `No results found` | Query too specific | Broaden query or lower threshold |
 | `embedding error` | Model loading issue | Check disk space, retry once |
-| `file not found` | Invalid path | Verify path exists before load |
+| `file not found` | Invalid path | Verify path exists before `buffer load` |
 
 ### Structured Error Handling Pattern
 
@@ -410,7 +410,7 @@ if [ $EXIT_CODE -ne 0 ]; then
             ;;
         *"buffer not found"*)
             echo "Buffer not found. Available buffers:"
-            rlm-rs list
+            rlm-rs buffer list
             ;;
         *"No results"*)
             echo "No results. Try broader query or: --threshold 0.1"
@@ -462,7 +462,7 @@ fi
 # Check 3: Content is loaded
 BUFFER_COUNT=$(rlm-rs --format json status | jq '.buffer_count')
 if [ "$BUFFER_COUNT" -eq 0 ]; then
-    echo "No content loaded. Use: rlm-rs load <file>"
+    echo "No content loaded. Use: rlm-rs buffer load <file>"
     exit 1
 fi
 
@@ -470,7 +470,7 @@ fi
 EMBED_COUNT=$(rlm-rs --format json chunk status | jq '.embedded_chunks')
 if [ "$EMBED_COUNT" -eq 0 ]; then
     echo "No embeddings. Generating..."
-    rlm-rs chunk embed --all
+    rlm-rs chunk embed <BUFFER>
 fi
 ```
 
@@ -522,7 +522,7 @@ rlm-rs init
 
 ### No Search Results
 
-1. Check if content is loaded: `rlm-rs list`
+1. Check if content is loaded: `rlm-rs buffer list`
 2. Verify embeddings exist: `rlm-rs chunk status`
 3. Try broader query or lower threshold: `--threshold 0.1`
 

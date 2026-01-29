@@ -39,7 +39,7 @@ pub struct ChatMessage {
 /// A chat completion request (provider-agnostic).
 #[derive(Debug, Clone)]
 pub struct ChatRequest {
-    /// Model identifier (e.g., "gpt-4o").
+    /// Model identifier (e.g., "gpt-5.2-2025-12-11").
     pub model: String,
     /// Ordered conversation messages.
     pub messages: Vec<ChatMessage>,

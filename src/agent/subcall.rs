@@ -246,13 +246,13 @@ mod tests {
         use super::super::prompt::SUBCALL_SYSTEM_PROMPT;
         let config = AgentConfig::builder()
             .api_key("test")
-            .subcall_model("gpt-4o-mini")
+            .subcall_model("gpt-5-mini-2025-08-07")
             .subcall_max_tokens(1024)
             .build()
             .unwrap_or_else(|_| unreachable!());
         let agent = SubcallAgent::new(&config, SUBCALL_SYSTEM_PROMPT.to_string());
         assert_eq!(agent.name(), "subcall");
-        assert_eq!(agent.model(), "gpt-4o-mini");
+        assert_eq!(agent.model(), "gpt-5-mini-2025-08-07");
         assert!(agent.json_mode());
         assert!((agent.temperature() - 0.0).abs() < f32::EPSILON);
         assert_eq!(agent.max_tokens(), 1024);

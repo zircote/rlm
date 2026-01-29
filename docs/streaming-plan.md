@@ -53,9 +53,9 @@ pub trait StreamingChunker: Send + Sync {
 
 **CLI Usage**:
 ```bash
-cat large_file.txt | rlm-rs load --stdin --name "piped"
+cat large_file.txt | rlm-rs buffer load --stdin --name "piped"
 rlm-rs search "query" --stream | head -10
-tail -f /var/log/app.log | rlm-rs load --stdin --incremental
+tail -f /var/log/app.log | rlm-rs buffer load --stdin --incremental
 ```
 
 ---
@@ -144,11 +144,11 @@ pub enum InputSource {
 
 ## CLI Pipeline Implementation Details
 
-### `cat file.txt | rlm-rs load --stdin`
+### `cat file.txt | rlm-rs buffer load --stdin`
 
 ```
 ┌──────┐    ┌─────────────────────────────────────────┐
-│ cat  │───>│ rlm-rs load --stdin                     │
+│ cat  │───>│ rlm-rs buffer load --stdin               │
 │      │    │   stdin → BufReader → Chunker → Storage │
 └──────┘    └─────────────────────────────────────────┘
 ```

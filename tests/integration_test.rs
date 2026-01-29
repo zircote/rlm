@@ -683,7 +683,7 @@ mod property_tests {
 /// CLI command integration tests.
 mod cli_tests {
     use rlm_rs::cli::commands::execute;
-    use rlm_rs::cli::parser::{ChunkCommands, Cli, Commands};
+    use rlm_rs::cli::parser::{BufferCommands, ChunkCommands, Cli, Commands, ContextCommands};
     use std::path::PathBuf;
     use tempfile::TempDir;
 
@@ -822,13 +822,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path,
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("test-buffer".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 100,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -849,13 +849,13 @@ mod cli_tests {
 
         let cli = make_cli_json(
             db_path,
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: None,
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 100,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -876,17 +876,17 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("mybuffer".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
-        let cli = make_cli(db_path, Commands::ListBuffers);
+        let cli = make_cli(db_path, Commands::Buffer(BufferCommands::List));
         let result = execute(&cli);
         assert!(result.is_ok());
         let output = result.expect("list output");
@@ -901,7 +901,7 @@ mod cli_tests {
         let cli = make_cli(db_path.clone(), Commands::Init { force: false });
         execute(&cli).expect("init");
 
-        let cli = make_cli(db_path, Commands::ListBuffers);
+        let cli = make_cli(db_path, Commands::Buffer(BufferCommands::List));
         let result = execute(&cli);
         assert!(result.is_ok());
         let output = result.expect("list output");
@@ -920,23 +920,23 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("showbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         // Show by name
         let cli = make_cli(
             db_path.clone(),
-            Commands::ShowBuffer {
+            Commands::Buffer(BufferCommands::Show {
                 buffer: "showbuf".to_string(),
                 chunks: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -946,10 +946,10 @@ mod cli_tests {
         // Show with chunks
         let cli = make_cli(
             db_path,
-            Commands::ShowBuffer {
+            Commands::Buffer(BufferCommands::Show {
                 buffer: "showbuf".to_string(),
                 chunks: true,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -967,10 +967,10 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path,
-            Commands::ShowBuffer {
+            Commands::Buffer(BufferCommands::Show {
                 buffer: "nonexistent".to_string(),
                 chunks: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_err());
@@ -988,23 +988,23 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("deleteme".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         // Delete requires --yes
         let cli = make_cli(
             db_path.clone(),
-            Commands::DeleteBuffer {
+            Commands::Buffer(BufferCommands::Delete {
                 buffer: "deleteme".to_string(),
                 yes: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_err());
@@ -1012,10 +1012,10 @@ mod cli_tests {
         // Delete with --yes
         let cli = make_cli(
             db_path.clone(),
-            Commands::DeleteBuffer {
+            Commands::Buffer(BufferCommands::Delete {
                 buffer: "deleteme".to_string(),
                 yes: true,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1023,10 +1023,10 @@ mod cli_tests {
         // Verify deleted
         let cli = make_cli(
             db_path,
-            Commands::ShowBuffer {
+            Commands::Buffer(BufferCommands::Show {
                 buffer: "deleteme".to_string(),
                 chunks: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_err());
@@ -1044,23 +1044,23 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("peekbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Peek {
+            Commands::Buffer(BufferCommands::Peek {
                 buffer: "peekbuf".to_string(),
                 start: 0,
                 end: Some(10),
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1070,11 +1070,11 @@ mod cli_tests {
         // Peek with default end
         let cli = make_cli(
             db_path,
-            Commands::Peek {
+            Commands::Buffer(BufferCommands::Peek {
                 buffer: "peekbuf".to_string(),
                 start: 5,
                 end: None,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1096,25 +1096,25 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("grepbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Grep {
+            Commands::Buffer(BufferCommands::Grep {
                 buffer: "grepbuf".to_string(),
                 pattern: "hello".to_string(),
                 max_matches: 10,
                 window: 50,
                 ignore_case: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1124,13 +1124,13 @@ mod cli_tests {
         // Case insensitive grep
         let cli = make_cli(
             db_path,
-            Commands::Grep {
+            Commands::Buffer(BufferCommands::Grep {
                 buffer: "grepbuf".to_string(),
                 pattern: "HELLO".to_string(),
                 max_matches: 10,
                 window: 50,
                 ignore_case: true,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1148,25 +1148,25 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("grepbuf2".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli(
             db_path,
-            Commands::Grep {
+            Commands::Buffer(BufferCommands::Grep {
                 buffer: "grepbuf2".to_string(),
                 pattern: "notfound".to_string(),
                 max_matches: 10,
                 window: 50,
                 ignore_case: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1186,23 +1186,23 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("chunkbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli(
             db_path,
-            Commands::ChunkIndices {
+            Commands::Chunk(ChunkCommands::Indices {
                 buffer: "chunkbuf".to_string(),
                 chunk_size: 50,
                 overlap: 10,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1221,25 +1221,25 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("writebuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli(
             db_path,
-            Commands::WriteChunks {
+            Commands::Chunk(ChunkCommands::Write {
                 buffer: "writebuf".to_string(),
                 out_dir,
                 chunk_size: 50,
                 overlap: 10,
                 prefix: "test".to_string(),
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1255,10 +1255,10 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::AddBuffer {
+            Commands::Buffer(BufferCommands::Add {
                 name: "addbuf".to_string(),
                 content: Some("Added content".to_string()),
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1266,10 +1266,10 @@ mod cli_tests {
         // Verify it was added
         let cli = make_cli(
             db_path,
-            Commands::ShowBuffer {
+            Commands::Buffer(BufferCommands::Show {
                 buffer: "addbuf".to_string(),
                 chunks: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1287,23 +1287,23 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("exportbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         // Export to stdout (no output file)
         let cli = make_cli(
             db_path.clone(),
-            Commands::ExportBuffers {
+            Commands::Buffer(BufferCommands::Export {
                 output: None,
                 pretty: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1311,10 +1311,10 @@ mod cli_tests {
         // Export with pretty print
         let cli = make_cli(
             db_path.clone(),
-            Commands::ExportBuffers {
+            Commands::Buffer(BufferCommands::Export {
                 output: None,
                 pretty: true,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1323,10 +1323,10 @@ mod cli_tests {
         let export_path = temp_dir.path().join("export.json");
         let cli = make_cli(
             db_path,
-            Commands::ExportBuffers {
+            Commands::Buffer(BufferCommands::Export {
                 output: Some(export_path.clone()),
                 pretty: true,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1344,11 +1344,11 @@ mod cli_tests {
         // Set variable
         let cli = make_cli(
             db_path.clone(),
-            Commands::Variable {
+            Commands::Context(ContextCommands::Var {
                 name: "myvar".to_string(),
                 value: Some("myvalue".to_string()),
                 delete: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1356,11 +1356,11 @@ mod cli_tests {
         // Get variable
         let cli = make_cli(
             db_path.clone(),
-            Commands::Variable {
+            Commands::Context(ContextCommands::Var {
                 name: "myvar".to_string(),
                 value: None,
                 delete: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1370,11 +1370,11 @@ mod cli_tests {
         // Delete variable
         let cli = make_cli(
             db_path,
-            Commands::Variable {
+            Commands::Context(ContextCommands::Var {
                 name: "myvar".to_string(),
                 value: None,
                 delete: true,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1391,11 +1391,11 @@ mod cli_tests {
         // Set global
         let cli = make_cli(
             db_path.clone(),
-            Commands::Global {
+            Commands::Context(ContextCommands::Global {
                 name: "globalvar".to_string(),
                 value: Some("globalvalue".to_string()),
                 delete: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1403,11 +1403,11 @@ mod cli_tests {
         // Get global
         let cli = make_cli(
             db_path.clone(),
-            Commands::Global {
+            Commands::Context(ContextCommands::Global {
                 name: "globalvar".to_string(),
                 value: None,
                 delete: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1415,11 +1415,11 @@ mod cli_tests {
         // Delete global
         let cli = make_cli(
             db_path,
-            Commands::Global {
+            Commands::Context(ContextCommands::Global {
                 name: "globalvar".to_string(),
                 value: None,
                 delete: true,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1441,13 +1441,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("searchbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -1481,13 +1481,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("chunkgetbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -1547,13 +1547,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("chunklistbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -1607,13 +1607,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("jsonsearch".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -1652,13 +1652,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path,
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("semantic".to_string()),
                 chunker: "semantic".to_string(),
                 chunk_size: 1000,
                 overlap: 100,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1676,13 +1676,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path,
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("parallel".to_string()),
                 chunker: "parallel".to_string(),
                 chunk_size: 100,
                 overlap: 10,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1699,11 +1699,11 @@ mod cli_tests {
         // Get nonexistent variable
         let cli = make_cli(
             db_path,
-            Commands::Variable {
+            Commands::Context(ContextCommands::Var {
                 name: "nonexistent".to_string(),
                 value: None,
                 delete: false,
-            },
+            }),
         );
         let result = execute(&cli);
         // Should return a message about variable not found
@@ -1722,13 +1722,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("embedbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -1779,23 +1779,23 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("resolvebuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         // Resolve by ID "1"
         let cli = make_cli(
             db_path,
-            Commands::ShowBuffer {
+            Commands::Buffer(BufferCommands::Show {
                 buffer: "1".to_string(), // ID instead of name
                 chunks: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1813,13 +1813,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("filterbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -1853,13 +1853,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("semanticbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -1920,25 +1920,25 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("grepjson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli_json(
             db_path,
-            Commands::Grep {
+            Commands::Buffer(BufferCommands::Grep {
                 buffer: "grepjson".to_string(),
                 pattern: "pattern".to_string(),
                 max_matches: 10,
                 window: 50,
                 ignore_case: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1958,23 +1958,23 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("peekjson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli_json(
             db_path,
-            Commands::Peek {
+            Commands::Buffer(BufferCommands::Peek {
                 buffer: "peekjson".to_string(),
                 start: 0,
                 end: Some(10),
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -1992,13 +1992,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("chunklistjson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -2026,13 +2026,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("chunkgetjson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -2061,23 +2061,23 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("indicesjson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli_json(
             db_path,
-            Commands::ChunkIndices {
+            Commands::Chunk(ChunkCommands::Indices {
                 buffer: "indicesjson".to_string(),
                 chunk_size: 50,
                 overlap: 10,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -2096,25 +2096,25 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("writejson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli_json(
             db_path,
-            Commands::WriteChunks {
+            Commands::Chunk(ChunkCommands::Write {
                 buffer: "writejson".to_string(),
                 out_dir,
                 chunk_size: 50,
                 overlap: 10,
                 prefix: "test".to_string(),
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -2132,22 +2132,22 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("deletejson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         let cli = make_cli_json(
             db_path,
-            Commands::DeleteBuffer {
+            Commands::Buffer(BufferCommands::Delete {
                 buffer: "deletejson".to_string(),
                 yes: true,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -2165,13 +2165,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("statusbuf".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -2214,13 +2214,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("statusjson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -2247,18 +2247,18 @@ mod cli_tests {
         let long_name = "a".repeat(50);
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some(long_name),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         // List buffers should truncate the long name
-        let cli = make_cli(db_path.clone(), Commands::ListBuffers);
+        let cli = make_cli(db_path.clone(), Commands::Buffer(BufferCommands::List));
         let result = execute(&cli);
         assert!(result.is_ok());
         let output = result.expect("list output");
@@ -2282,10 +2282,10 @@ mod cli_tests {
         // Add buffer with JSON output (covers lines 533-538)
         let cli = make_cli_json(
             db_path,
-            Commands::AddBuffer {
+            Commands::Buffer(BufferCommands::Add {
                 name: "addjson".to_string(),
                 content: Some("JSON added content".to_string()),
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -2305,13 +2305,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("alreadyembedded".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -2351,13 +2351,13 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("embedjson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
@@ -2386,11 +2386,11 @@ mod cli_tests {
         // Set variable with JSON output
         let cli = make_cli_json(
             db_path.clone(),
-            Commands::Variable {
+            Commands::Context(ContextCommands::Var {
                 name: "jsonvar".to_string(),
                 value: Some("jsonvalue".to_string()),
                 delete: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -2398,11 +2398,11 @@ mod cli_tests {
         // Get variable with JSON output
         let cli = make_cli_json(
             db_path,
-            Commands::Variable {
+            Commands::Context(ContextCommands::Var {
                 name: "jsonvar".to_string(),
                 value: None,
                 delete: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -2419,11 +2419,11 @@ mod cli_tests {
         // Set global with JSON output
         let cli = make_cli_json(
             db_path.clone(),
-            Commands::Global {
+            Commands::Context(ContextCommands::Global {
                 name: "jsonglobal".to_string(),
                 value: Some("jsonglobalvalue".to_string()),
                 delete: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -2431,11 +2431,11 @@ mod cli_tests {
         // Get global with JSON output
         let cli = make_cli_json(
             db_path,
-            Commands::Global {
+            Commands::Context(ContextCommands::Global {
                 name: "jsonglobal".to_string(),
                 value: None,
                 delete: false,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -2460,13 +2460,13 @@ mod cli_tests {
         for (file, name) in [(&file1, "buf1"), (&file2, "buf2"), (&file3, "buf3")] {
             let cli = make_cli(
                 db_path.clone(),
-                Commands::Load {
+                Commands::Buffer(BufferCommands::Load {
                     file: file.clone(),
                     name: Some(name.to_string()),
                     chunker: "fixed".to_string(),
                     chunk_size: 1000,
                     overlap: 0,
-                },
+                }),
             );
             execute(&cli).expect("load");
         }
@@ -2507,23 +2507,23 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("showjson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         // Show buffer with JSON output
         let cli = make_cli_json(
             db_path,
-            Commands::ShowBuffer {
+            Commands::Buffer(BufferCommands::Show {
                 buffer: "showjson".to_string(),
                 chunks: true,
-            },
+            }),
         );
         let result = execute(&cli);
         assert!(result.is_ok());
@@ -2543,18 +2543,18 @@ mod cli_tests {
 
         let cli = make_cli(
             db_path.clone(),
-            Commands::Load {
+            Commands::Buffer(BufferCommands::Load {
                 file: file_path,
                 name: Some("listjson".to_string()),
                 chunker: "fixed".to_string(),
                 chunk_size: 1000,
                 overlap: 0,
-            },
+            }),
         );
         execute(&cli).expect("load");
 
         // List buffers with JSON output
-        let cli = make_cli_json(db_path, Commands::ListBuffers);
+        let cli = make_cli_json(db_path, Commands::Buffer(BufferCommands::List));
         let result = execute(&cli);
         assert!(result.is_ok());
         let output = result.expect("json output");
@@ -2705,10 +2705,11 @@ fn test_parallel_chunker_small_content_fallback() {
 // Aggregate / Dispatch / Relevance CLI tests
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "agent")]
 #[test]
 fn test_cmd_aggregate_from_buffer() {
     use rlm_rs::cli::commands::execute;
-    use rlm_rs::cli::parser::{Cli, Commands};
+    use rlm_rs::cli::parser::{AgentCommands, Cli, Commands};
     use tempfile::TempDir;
 
     let temp_dir = TempDir::new().expect("temp dir");
@@ -2743,13 +2744,13 @@ fn test_cmd_aggregate_from_buffer() {
         db_path: Some(db_path.clone()),
         verbose: false,
         format: "text".to_string(),
-        command: Commands::Aggregate {
+        command: Commands::Agent(AgentCommands::Aggregate {
             buffer: Some("test-findings".to_string()),
             min_relevance: "low".to_string(),
             group_by: "relevance".to_string(),
             sort_by: "relevance".to_string(),
             output_buffer: None,
-        },
+        }),
     };
     let result = execute(&cli).expect("aggregate text");
     assert!(result.contains("Aggregated 3 analyst findings"));
@@ -2762,13 +2763,13 @@ fn test_cmd_aggregate_from_buffer() {
         db_path: Some(db_path.clone()),
         verbose: false,
         format: "text".to_string(),
-        command: Commands::Aggregate {
+        command: Commands::Agent(AgentCommands::Aggregate {
             buffer: Some("test-findings".to_string()),
             min_relevance: "medium".to_string(),
             group_by: "relevance".to_string(),
             sort_by: "relevance".to_string(),
             output_buffer: None,
-        },
+        }),
     };
     let result = execute(&cli).expect("aggregate filtered");
     assert!(result.contains("Aggregated 2 analyst findings"));
@@ -2778,23 +2779,24 @@ fn test_cmd_aggregate_from_buffer() {
         db_path: Some(db_path),
         verbose: false,
         format: "json".to_string(),
-        command: Commands::Aggregate {
+        command: Commands::Agent(AgentCommands::Aggregate {
             buffer: Some("test-findings".to_string()),
             min_relevance: "low".to_string(),
             group_by: "none".to_string(),
             sort_by: "chunk_id".to_string(),
             output_buffer: None,
-        },
+        }),
     };
     let result = execute(&cli).expect("aggregate json");
     let parsed: serde_json::Value = serde_json::from_str(&result).expect("valid json");
     assert_eq!(parsed["summary"]["total_findings"], 3);
 }
 
+#[cfg(feature = "agent")]
 #[test]
 fn test_cmd_dispatch() {
     use rlm_rs::cli::commands::execute;
-    use rlm_rs::cli::parser::{Cli, Commands};
+    use rlm_rs::cli::parser::{AgentCommands, BufferCommands, Cli, Commands};
     use tempfile::TempDir;
 
     let temp_dir = TempDir::new().expect("temp dir");
@@ -2819,13 +2821,13 @@ fn test_cmd_dispatch() {
         db_path: Some(db_path.clone()),
         verbose: false,
         format: "text".to_string(),
-        command: Commands::Load {
+        command: Commands::Buffer(BufferCommands::Load {
             file: file_path,
             name: Some("dispatch-buf".to_string()),
             chunker: "fixed".to_string(),
             chunk_size: 30,
             overlap: 0,
-        },
+        }),
     };
     execute(&cli).expect("load");
 
@@ -2834,14 +2836,14 @@ fn test_cmd_dispatch() {
         db_path: Some(db_path.clone()),
         verbose: false,
         format: "text".to_string(),
-        command: Commands::Dispatch {
+        command: Commands::Agent(AgentCommands::Dispatch {
             buffer: "dispatch-buf".to_string(),
             batch_size: 2,
             workers: None,
             query: None,
             mode: "hybrid".to_string(),
             threshold: 0.3,
-        },
+        }),
     };
     let result = execute(&cli).expect("dispatch text");
     assert!(result.contains("batch"));
@@ -2851,14 +2853,14 @@ fn test_cmd_dispatch() {
         db_path: Some(db_path),
         verbose: false,
         format: "json".to_string(),
-        command: Commands::Dispatch {
+        command: Commands::Agent(AgentCommands::Dispatch {
             buffer: "dispatch-buf".to_string(),
             batch_size: 2,
             workers: None,
             query: None,
             mode: "bm25".to_string(),
             threshold: 0.3,
-        },
+        }),
     };
     let result = execute(&cli).expect("dispatch json");
     let parsed: serde_json::Value = serde_json::from_str(&result).expect("valid json");

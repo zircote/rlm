@@ -144,7 +144,7 @@ impl OpenAiProvider {
         CreateChatCompletionRequest {
             model: request.model.clone(),
             messages,
-            temperature: request.temperature,
+            temperature: request.temperature.filter(|&t| t != 0.0),
             max_completion_tokens: request.max_tokens,
             stream: if request.stream { Some(true) } else { None },
             response_format,
@@ -315,7 +315,7 @@ mod tests {
     #[test]
     fn test_build_request_json_mode() {
         let request = ChatRequest {
-            model: "gpt-4o".to_string(),
+            model: "gpt-5.2-2025-12-11".to_string(),
             messages: vec![message::user_message("test")],
             temperature: Some(0.0),
             max_tokens: Some(100),
@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn test_build_request_streaming() {
         let request = ChatRequest {
-            model: "gpt-4o".to_string(),
+            model: "gpt-5.2-2025-12-11".to_string(),
             messages: vec![message::user_message("test")],
             temperature: None,
             max_tokens: None,
@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn test_build_request_with_tools() {
         let request = ChatRequest {
-            model: "gpt-4o".to_string(),
+            model: "gpt-5.2-2025-12-11".to_string(),
             messages: vec![message::user_message("test")],
             temperature: Some(0.0),
             max_tokens: Some(100),

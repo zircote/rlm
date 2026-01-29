@@ -77,13 +77,13 @@ The paper treats chunking as a preprocessing step. rlm-rs makes it a first-class
 
 ```bash
 # Semantic chunking preserves natural boundaries
-rlm-rs load README.md --chunker semantic
+rlm-rs buffer load README.md --chunker semantic
 
 # Fixed chunking for uniform sizes
-rlm-rs load server.log --chunker fixed --chunk-size 50000
+rlm-rs buffer load server.log --chunker fixed --chunk-size 50000
 
 # Parallel chunking for speed on large files
-rlm-rs load huge-dump.txt --chunker parallel
+rlm-rs buffer load huge-dump.txt --chunker parallel
 ```
 
 #### 4. Auto-Embedding on Load
@@ -91,7 +91,7 @@ rlm-rs load huge-dump.txt --chunker parallel
 Embeddings are generated automatically during document ingestion:
 
 ```bash
-rlm-rs load document.md --name docs
+rlm-rs buffer load document.md --name docs
 # Output: Loaded document.md as 'docs' (15 chunks, embeddings generated)
 ```
 
@@ -125,7 +125,7 @@ rlm-rs is designed as a **command-line tool** that any AI assistant can invoke v
 ```bash
 # Any AI assistant can run these commands
 rlm-rs init
-rlm-rs load document.md --name docs
+rlm-rs buffer load document.md --name docs
 rlm-rs search "error handling" --format json
 rlm-rs chunk get 42
 ```

@@ -59,7 +59,7 @@ make install
 rlm-rs init
 
 # Load a large document (auto-generates embeddings)
-rlm-rs load document.md --name docs --chunker semantic
+rlm-rs buffer load document.md --name docs --chunker semantic
 
 # Search with hybrid semantic + BM25
 rlm-rs search "your query" --buffer docs --top-k 10
@@ -71,39 +71,62 @@ rlm-rs chunk get 42
 rlm-rs status
 
 # Regex search content
-rlm-rs grep docs "pattern" --max-matches 20
+rlm-rs buffer grep docs "pattern" --max-matches 20
 
 # View content slice
-rlm-rs peek docs --start 0 --end 3000
+rlm-rs buffer peek docs --start 0 --end 3000
 ```
 
 ## Commands
 
+### Top-Level Commands
+
 | Command | Description |
 |---------|-------------|
-| `query` | Agentic LLM analysis (requires `agent` feature) |
 | `init` | Initialize the RLM database |
 | `status` | Show current state (buffers, chunks, DB info) |
-| `load` | Load a file into a buffer with chunking (auto-embeds) |
 | `search` | Hybrid semantic + BM25 search across chunks |
-| `update-buffer` | Update buffer content with re-chunking |
-| `dispatch` | Split chunks into batches for parallel subagent processing |
-| `aggregate` | Combine findings from analyst subagents |
+| `reset` | Delete all RLM state |
+
+### Buffer Commands (`rlm-rs buffer ...`)
+
+| Command | Description |
+|---------|-------------|
+| `buffer load` | Load a file into a buffer with chunking (auto-embeds) |
+| `buffer list` | List all buffers |
+| `buffer show` | Show buffer details |
+| `buffer delete` | Delete a buffer |
+| `buffer peek` | View a slice of buffer content |
+| `buffer grep` | Search buffer content with regex |
+| `buffer add` | Add text to a new buffer |
+| `buffer update` | Update buffer content with re-chunking |
+| `buffer export` | Export all buffers to JSON |
+
+### Chunk Commands (`rlm-rs chunk ...`)
+
+| Command | Description |
+|---------|-------------|
 | `chunk get` | Retrieve chunk by ID (pass-by-reference) |
 | `chunk list` | List chunks for a buffer |
 | `chunk embed` | Generate embeddings (or re-embed with --force) |
 | `chunk status` | Show embedding status |
-| `list` | List all buffers |
-| `show` | Show buffer details |
-| `delete` | Delete a buffer |
-| `peek` | View a slice of buffer content |
-| `grep` | Search buffer content with regex |
-| `write-chunks` | Write chunks to individual files |
-| `add-buffer` | Add text to a new buffer |
-| `export-buffers` | Export all buffers to JSON |
-| `var` | Get/set context variables |
-| `global` | Get/set global variables |
-| `reset` | Delete all RLM state |
+| `chunk indices` | Show chunk index ranges |
+| `chunk write` | Write chunks to individual files |
+
+### Context Commands (`rlm-rs context ...`)
+
+| Command | Description |
+|---------|-------------|
+| `context var` | Get/set context variables |
+| `context global` | Get/set global variables |
+
+### Agent Commands (`rlm-rs agent ...`)
+
+| Command | Description |
+|---------|-------------|
+| `agent query` | Agentic LLM analysis (requires `agent` feature) |
+| `agent dispatch` | Split chunks into batches for parallel subagent processing |
+| `agent aggregate` | Combine findings from analyst subagents |
 
 ## Chunking Strategies
 
@@ -116,16 +139,16 @@ rlm-rs peek docs --start 0 --end 3000
 
 ```bash
 # Semantic chunking (default)
-rlm-rs load doc.md --chunker semantic
+rlm-rs buffer load doc.md --chunker semantic
 
 # Code-aware chunking for source files
-rlm-rs load src/main.rs --chunker code
+rlm-rs buffer load src/main.rs --chunker code
 
 # Fixed chunking with overlap
-rlm-rs load logs.txt --chunker fixed --chunk-size 150000 --overlap 1000
+rlm-rs buffer load logs.txt --chunker fixed --chunk-size 150000 --overlap 1000
 
 # Parallel chunking for speed
-rlm-rs load huge.txt --chunker parallel --chunk-size 100000
+rlm-rs buffer load huge.txt --chunker parallel --chunk-size 100000
 ```
 
 ### Supported Languages (Code Chunker)
@@ -196,6 +219,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Documentation
 
+- [Agent Guide](docs/agent-guide.md) - Query engine pipeline, adaptive scaling, and configuration
 - [RLM-Inspired Design](docs/rlm-inspired-design.md) - How rlm-rs builds on the RLM paper
 - [Plugin Integration](docs/plugin-integration.md) - Integration with Claude Code, Copilot, Codex, and more
 - [Architecture](docs/architecture.md) - Internal architecture and design
