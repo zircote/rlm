@@ -20,6 +20,21 @@ const MAX_FINDING_TEXT_LEN: usize = 5_000;
 /// Maximum number of follow-up suggestions per finding.
 const MAX_FOLLOW_UPS: usize = 10;
 
+/// Marker appended to truncated text so downstream agents know the
+/// content is incomplete.
+const TRUNCATED_MARKER: &str = " [truncated]";
+
+/// Truncates `text` to at most `max_len` bytes at a valid UTF-8 boundary,
+/// appending [`TRUNCATED_MARKER`] so the synthesizer knows the field was
+/// shortened and can look up the full source via `chunk_id`.
+fn truncate_with_marker(text: &mut String, max_len: usize) {
+    if text.len() > max_len {
+        let boundary = crate::io::find_char_boundary(text, max_len);
+        text.truncate(boundary);
+        text.push_str(TRUNCATED_MARKER);
+    }
+}
+
 /// Agent that analyzes document chunks and extracts relevant findings.
 ///
 /// Each subcall agent processes a batch of chunks and returns structured
@@ -75,24 +90,23 @@ impl SubcallAgent {
     }
 
     /// Caps counts and truncates oversized text fields in parsed findings.
+    ///
+    /// Uses [`find_char_boundary`] for UTF-8 safe truncation to avoid
+    /// panicking on multi-byte characters. Appends `" [truncated]"` to
+    /// any field that was shortened so the synthesizer knows the data
+    /// is incomplete and can look up the full source via `chunk_id`.
     fn sanitize_findings(mut findings: Vec<Finding>) -> Vec<Finding> {
         findings.truncate(MAX_FINDINGS_PER_BATCH);
         for f in &mut findings {
             for text in &mut f.findings {
-                if text.len() > MAX_FINDING_TEXT_LEN {
-                    text.truncate(MAX_FINDING_TEXT_LEN);
-                }
+                truncate_with_marker(text, MAX_FINDING_TEXT_LEN);
             }
-            if let Some(ref mut s) = f.summary
-                && s.len() > MAX_FINDING_TEXT_LEN
-            {
-                s.truncate(MAX_FINDING_TEXT_LEN);
+            if let Some(ref mut s) = f.summary {
+                truncate_with_marker(s, MAX_FINDING_TEXT_LEN);
             }
             f.follow_up.truncate(MAX_FOLLOW_UPS);
             for text in &mut f.follow_up {
-                if text.len() > MAX_FINDING_TEXT_LEN {
-                    text.truncate(MAX_FINDING_TEXT_LEN);
-                }
+                truncate_with_marker(text, MAX_FINDING_TEXT_LEN);
             }
         }
         findings
@@ -233,10 +247,14 @@ mod tests {
             std::iter::repeat_n(finding, MAX_FINDINGS_PER_BATCH + 50).collect();
         let sanitized = SubcallAgent::sanitize_findings(findings);
         assert_eq!(sanitized.len(), MAX_FINDINGS_PER_BATCH);
-        assert_eq!(sanitized[0].findings[0].len(), MAX_FINDING_TEXT_LEN);
+        assert_eq!(
+            sanitized[0].findings[0].len(),
+            MAX_FINDING_TEXT_LEN + TRUNCATED_MARKER.len()
+        );
+        assert!(sanitized[0].findings[0].ends_with(TRUNCATED_MARKER));
         assert_eq!(
             sanitized[0].summary.as_ref().map(String::len),
-            Some(MAX_FINDING_TEXT_LEN)
+            Some(MAX_FINDING_TEXT_LEN + TRUNCATED_MARKER.len())
         );
         assert_eq!(sanitized[0].follow_up.len(), MAX_FOLLOW_UPS);
     }
