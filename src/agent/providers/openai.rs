@@ -144,7 +144,7 @@ impl OpenAiProvider {
         CreateChatCompletionRequest {
             model: request.model.clone(),
             messages,
-            temperature: request.temperature.filter(|&t| t != 0.0),
+            temperature: request.temperature.filter(|&t| t.abs() > f32::EPSILON),
             max_completion_tokens: request.max_tokens,
             stream: if request.stream { Some(true) } else { None },
             response_format,
