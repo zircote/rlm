@@ -29,11 +29,14 @@ pub mod io;
 pub mod search;
 pub mod storage;
 
+#[cfg(feature = "agent")]
+pub mod agent;
+
 // Re-export commonly used types at crate root
 pub use error::{Error, Result};
 
 // Re-export core domain types
-pub use core::{Buffer, BufferMetadata, Chunk, ChunkMetadata, Context, ContextValue};
+pub use core::{Buffer, BufferMetadata, Chunk, ChunkMetadata, Context, ContextValue, Relevance};
 
 // Re-export storage types
 pub use storage::{DEFAULT_DB_PATH, SqliteStorage, Storage};

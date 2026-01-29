@@ -44,6 +44,11 @@ pub enum Error {
         /// Description of the configuration error.
         message: String,
     },
+
+    /// Agent system errors.
+    #[cfg(feature = "agent")]
+    #[error("agent error: {0}")]
+    Agent(#[from] AgentError),
 }
 
 /// Storage-specific errors for database operations.
@@ -274,6 +279,77 @@ pub enum CommandError {
     /// Output format error.
     #[error("output format error: {0}")]
     OutputFormat(String),
+}
+
+/// Agent-specific errors for the agentic query system.
+#[cfg(feature = "agent")]
+#[derive(Error, Debug)]
+pub enum AgentError {
+    /// API request failed.
+    #[error("API request failed: {message}")]
+    ApiRequest {
+        /// Error message.
+        message: String,
+        /// HTTP status code, if available.
+        status: Option<u16>,
+    },
+
+    /// Failed to parse the LLM response.
+    #[error("response parse error: {message}")]
+    ResponseParse {
+        /// Parse error message.
+        message: String,
+        /// Raw response content.
+        content: String,
+    },
+
+    /// API key not configured.
+    #[error("API key not configured. Set OPENAI_API_KEY or RLM_API_KEY environment variable")]
+    ApiKeyMissing,
+
+    /// Unsupported provider.
+    #[error("unsupported provider: {name}")]
+    UnsupportedProvider {
+        /// Provider name.
+        name: String,
+    },
+
+    /// No chunks available for analysis.
+    #[error("no chunks found for analysis: {hint}")]
+    NoChunks {
+        /// Diagnostic hint explaining why no chunks were found.
+        hint: String,
+    },
+
+    /// Orchestration error.
+    #[error("orchestration error: {message}")]
+    Orchestration {
+        /// Error message.
+        message: String,
+    },
+
+    /// Streaming error.
+    #[error("stream error: {message}")]
+    Stream {
+        /// Error message.
+        message: String,
+    },
+
+    /// Tool execution failed.
+    #[error("tool execution failed: {name}: {message}")]
+    ToolExecution {
+        /// Name of the tool that failed.
+        name: String,
+        /// Error message.
+        message: String,
+    },
+
+    /// Tool-calling loop exceeded maximum iterations.
+    #[error("tool loop exceeded {max_iterations} iterations")]
+    ToolLoopExceeded {
+        /// Maximum iterations allowed.
+        max_iterations: usize,
+    },
 }
 
 // Implement From traits for standard library errors

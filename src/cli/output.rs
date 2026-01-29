@@ -35,6 +35,34 @@ impl OutputFormat {
     pub const fn is_streaming(&self) -> bool {
         matches!(self, Self::Ndjson)
     }
+
+    /// Serializes a value to JSON string.
+    ///
+    /// Uses pretty-printing for [`Json`](Self::Json) and compact single-line
+    /// format for [`Ndjson`](Self::Ndjson). Falls back to pretty-printing
+    /// for [`Text`](Self::Text).
+    #[must_use]
+    pub fn to_json<T: Serialize>(&self, value: &T) -> String {
+        match self {
+            Self::Ndjson => serde_json::to_string(value).unwrap_or_else(|_| "{}".to_string()),
+            _ => serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string()),
+        }
+    }
+
+    /// Serializes a slice as newline-delimited JSON (one object per line)
+    /// for [`Ndjson`](Self::Ndjson), or as a pretty-printed JSON array for
+    /// [`Json`](Self::Json).
+    #[must_use]
+    pub fn to_json_array<T: Serialize>(&self, values: &[T]) -> String {
+        match self {
+            Self::Ndjson => values
+                .iter()
+                .filter_map(|v| serde_json::to_string(v).ok())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            _ => serde_json::to_string_pretty(values).unwrap_or_else(|_| "[]".to_string()),
+        }
+    }
 }
 
 /// Formats a status response.
@@ -42,7 +70,7 @@ impl OutputFormat {
 pub fn format_status(stats: &StorageStats, format: OutputFormat) -> String {
     match format {
         OutputFormat::Text => format_status_text(stats),
-        OutputFormat::Json | OutputFormat::Ndjson => format_json(stats),
+        OutputFormat::Json | OutputFormat::Ndjson => format.to_json(stats),
     }
 }
 
@@ -74,7 +102,7 @@ fn format_status_text(stats: &StorageStats) -> String {
 pub fn format_buffer_list(buffers: &[Buffer], format: OutputFormat) -> String {
     match format {
         OutputFormat::Text => format_buffer_list_text(buffers),
-        OutputFormat::Json | OutputFormat::Ndjson => format_json(&buffers),
+        OutputFormat::Json | OutputFormat::Ndjson => format.to_json_array(buffers),
     }
 }
 
@@ -131,7 +159,7 @@ pub fn format_buffer(buffer: &Buffer, chunks: Option<&[Chunk]>, format: OutputFo
                 buffer: &'a Buffer,
                 chunks: Option<&'a [Chunk]>,
             }
-            format_json(&BufferWithChunks { buffer, chunks })
+            format.to_json(&BufferWithChunks { buffer, chunks })
         }
     }
 }
@@ -210,7 +238,7 @@ pub fn format_peek(content: &str, start: usize, end: usize, format: OutputFormat
                 size: usize,
                 content: &'a str,
             }
-            format_json(&PeekOutput {
+            format.to_json(&PeekOutput {
                 start,
                 end,
                 size: end - start,
@@ -225,7 +253,7 @@ pub fn format_peek(content: &str, start: usize, end: usize, format: OutputFormat
 pub fn format_grep_matches(matches: &[GrepMatch], pattern: &str, format: OutputFormat) -> String {
     match format {
         OutputFormat::Text => format_grep_text(matches, pattern),
-        OutputFormat::Json | OutputFormat::Ndjson => format_json(&matches),
+        OutputFormat::Json | OutputFormat::Ndjson => format.to_json_array(matches),
     }
 }
 
@@ -261,7 +289,7 @@ pub fn format_chunk_indices(indices: &[(usize, usize)], format: OutputFormat) ->
             }
             output
         }
-        OutputFormat::Json | OutputFormat::Ndjson => format_json(&indices),
+        OutputFormat::Json | OutputFormat::Ndjson => format.to_json_array(indices),
     }
 }
 
@@ -277,7 +305,7 @@ pub fn format_write_chunks_result(paths: &[String], format: OutputFormat) -> Str
             }
             output
         }
-        OutputFormat::Json | OutputFormat::Ndjson => format_json(&paths),
+        OutputFormat::Json | OutputFormat::Ndjson => format.to_json_array(paths),
     }
 }
 
@@ -293,7 +321,7 @@ pub fn format_context(context: &Context, format: OutputFormat) -> String {
             let _ = writeln!(output, "  Buffers:   {}", context.buffer_count());
             output
         }
-        OutputFormat::Json | OutputFormat::Ndjson => format_json(&context),
+        OutputFormat::Json | OutputFormat::Ndjson => format.to_json(context),
     }
 }
 
@@ -306,11 +334,6 @@ pub struct GrepMatch {
     pub matched: String,
     /// Context snippet around the match.
     pub snippet: String,
-}
-
-/// Formats a value as JSON.
-fn format_json<T: Serialize>(value: &T) -> String {
-    serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string())
 }
 
 /// Formats an error for output.
@@ -331,7 +354,7 @@ pub fn format_error(error: &crate::Error, format: OutputFormat) -> String {
                     "suggestion": suggestion
                 }
             });
-            serde_json::to_string_pretty(&json).unwrap_or_else(|_| "{}".to_string())
+            format.to_json(&json)
         }
     }
 }
@@ -407,6 +430,8 @@ const fn get_error_details(error: &crate::Error) -> (&'static str, Option<&'stat
         crate::Error::InvalidState { .. } => ("InvalidState", None),
         crate::Error::Config { .. } => ("ConfigError", None),
         crate::Error::Search(_) => ("SearchError", None),
+        #[cfg(feature = "agent")]
+        crate::Error::Agent(_) => ("AgentError", None),
     }
 }
 
@@ -425,13 +450,17 @@ fn format_size(bytes: usize) -> String {
 }
 
 /// Truncates a string to max length with ellipsis.
+///
+/// Uses [`find_char_boundary`] to avoid panicking on multi-byte UTF-8 characters.
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
     } else if max_len <= 3 {
-        s[..max_len].to_string()
+        let end = crate::io::find_char_boundary(s, max_len);
+        s[..end].to_string()
     } else {
-        format!("{}...", &s[..max_len - 3])
+        let end = crate::io::find_char_boundary(s, max_len - 3);
+        format!("{}...", &s[..end])
     }
 }
 
