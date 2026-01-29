@@ -2700,3 +2700,198 @@ fn test_parallel_chunker_small_content_fallback() {
     assert!(!chunks.is_empty());
     assert_eq!(chunks[0].buffer_id, 1);
 }
+
+// ---------------------------------------------------------------------------
+// Aggregate / Dispatch / Relevance CLI tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_cmd_aggregate_from_buffer() {
+    use rlm_rs::cli::commands::execute;
+    use rlm_rs::cli::parser::{Cli, Commands};
+    use tempfile::TempDir;
+
+    let temp_dir = TempDir::new().expect("temp dir");
+    let db_path = temp_dir.path().join("test.db");
+
+    // Init database
+    let cli = Cli {
+        db_path: Some(db_path.clone()),
+        verbose: false,
+        format: "text".to_string(),
+        command: Commands::Init { force: false },
+    };
+    execute(&cli).expect("init");
+
+    // Store findings JSON in a buffer
+    let findings_json = r#"[
+        {"chunk_id": 1, "relevance": "high", "findings": ["Found critical bug"], "summary": "Bug in auth"},
+        {"chunk_id": 2, "relevance": "medium", "findings": ["Minor issue"], "summary": "Logging gap"},
+        {"chunk_id": 3, "relevance": "low", "findings": ["Style nit"], "summary": "Naming"}
+    ]"#;
+    {
+        let mut storage = rlm_rs::storage::SqliteStorage::open(&db_path).expect("open storage");
+        let buf = rlm_rs::core::Buffer::from_named(
+            "test-findings".to_string(),
+            findings_json.to_string(),
+        );
+        storage.add_buffer(&buf).expect("add buffer");
+    }
+
+    // Aggregate from buffer — text output
+    let cli = Cli {
+        db_path: Some(db_path.clone()),
+        verbose: false,
+        format: "text".to_string(),
+        command: Commands::Aggregate {
+            buffer: Some("test-findings".to_string()),
+            min_relevance: "low".to_string(),
+            group_by: "relevance".to_string(),
+            sort_by: "relevance".to_string(),
+            output_buffer: None,
+        },
+    };
+    let result = execute(&cli).expect("aggregate text");
+    assert!(result.contains("Aggregated 3 analyst findings"));
+    assert!(result.contains("1 high"));
+    assert!(result.contains("1 medium"));
+    assert!(result.contains("1 low"));
+
+    // Aggregate with medium threshold — should filter out low
+    let cli = Cli {
+        db_path: Some(db_path.clone()),
+        verbose: false,
+        format: "text".to_string(),
+        command: Commands::Aggregate {
+            buffer: Some("test-findings".to_string()),
+            min_relevance: "medium".to_string(),
+            group_by: "relevance".to_string(),
+            sort_by: "relevance".to_string(),
+            output_buffer: None,
+        },
+    };
+    let result = execute(&cli).expect("aggregate filtered");
+    assert!(result.contains("Aggregated 2 analyst findings"));
+
+    // Aggregate JSON output
+    let cli = Cli {
+        db_path: Some(db_path),
+        verbose: false,
+        format: "json".to_string(),
+        command: Commands::Aggregate {
+            buffer: Some("test-findings".to_string()),
+            min_relevance: "low".to_string(),
+            group_by: "none".to_string(),
+            sort_by: "chunk_id".to_string(),
+            output_buffer: None,
+        },
+    };
+    let result = execute(&cli).expect("aggregate json");
+    let parsed: serde_json::Value = serde_json::from_str(&result).expect("valid json");
+    assert_eq!(parsed["summary"]["total_findings"], 3);
+}
+
+#[test]
+fn test_cmd_dispatch() {
+    use rlm_rs::cli::commands::execute;
+    use rlm_rs::cli::parser::{Cli, Commands};
+    use tempfile::TempDir;
+
+    let temp_dir = TempDir::new().expect("temp dir");
+    let db_path = temp_dir.path().join("test.db");
+    let file_path = temp_dir.path().join("source.txt");
+    std::fs::write(
+        &file_path,
+        "First section content.\nSecond section content.\nThird section content.",
+    )
+    .expect("write file");
+
+    // Init + load
+    let cli = Cli {
+        db_path: Some(db_path.clone()),
+        verbose: false,
+        format: "text".to_string(),
+        command: Commands::Init { force: false },
+    };
+    execute(&cli).expect("init");
+
+    let cli = Cli {
+        db_path: Some(db_path.clone()),
+        verbose: false,
+        format: "text".to_string(),
+        command: Commands::Load {
+            file: file_path,
+            name: Some("dispatch-buf".to_string()),
+            chunker: "fixed".to_string(),
+            chunk_size: 30,
+            overlap: 0,
+        },
+    };
+    execute(&cli).expect("load");
+
+    // Dispatch — text
+    let cli = Cli {
+        db_path: Some(db_path.clone()),
+        verbose: false,
+        format: "text".to_string(),
+        command: Commands::Dispatch {
+            buffer: "dispatch-buf".to_string(),
+            batch_size: 2,
+            workers: None,
+            query: None,
+            mode: "hybrid".to_string(),
+            threshold: 0.3,
+        },
+    };
+    let result = execute(&cli).expect("dispatch text");
+    assert!(result.contains("batch"));
+
+    // Dispatch — JSON
+    let cli = Cli {
+        db_path: Some(db_path),
+        verbose: false,
+        format: "json".to_string(),
+        command: Commands::Dispatch {
+            buffer: "dispatch-buf".to_string(),
+            batch_size: 2,
+            workers: None,
+            query: None,
+            mode: "bm25".to_string(),
+            threshold: 0.3,
+        },
+    };
+    let result = execute(&cli).expect("dispatch json");
+    let parsed: serde_json::Value = serde_json::from_str(&result).expect("valid json");
+    assert!(parsed["batches"].is_array());
+}
+
+#[test]
+fn test_relevance_shared_type() {
+    use rlm_rs::core::Relevance;
+
+    // Verify the shared Relevance type works correctly
+    let high = Relevance::parse("high");
+    let medium = Relevance::parse("medium");
+    let low = Relevance::parse("low");
+    let none = Relevance::parse("none");
+
+    // Ordering: High < Medium < Low < None (by discriminant)
+    assert!(high < medium);
+    assert!(medium < low);
+    assert!(low < none);
+
+    // Threshold checks
+    assert!(high.meets_threshold(low)); // high meets a low bar
+    assert!(!low.meets_threshold(high)); // low doesn't meet a high bar
+    assert!(medium.meets_threshold(medium)); // self meets self
+
+    // Display roundtrip
+    assert_eq!(high.as_str(), "high");
+    assert_eq!(format!("{medium}"), "medium");
+
+    // Serde roundtrip
+    let json = serde_json::to_string(&high).expect("serialize");
+    assert_eq!(json, "\"high\"");
+    let deser: Relevance = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(deser, high);
+}

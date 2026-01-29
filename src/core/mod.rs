@@ -7,7 +7,9 @@
 pub mod buffer;
 pub mod chunk;
 pub mod context;
+pub mod relevance;
 
 pub use buffer::{Buffer, BufferMetadata};
 pub use chunk::{Chunk, ChunkMetadata, estimate_tokens_for_text};
 pub use context::{Context, ContextValue};
+pub use relevance::Relevance;

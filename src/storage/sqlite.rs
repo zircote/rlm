@@ -624,6 +624,53 @@ impl Storage for SqliteStorage {
     }
 }
 
+// ==================== Batch Chunk Metadata ====================
+
+impl SqliteStorage {
+    /// Batch-fetches chunk metadata (`buffer_id`, index) for a set of chunk IDs.
+    ///
+    /// Returns a map from `chunk_id` to `(buffer_id, index)`. Missing or
+    /// invalid chunk IDs are silently omitted from the result.
+    ///
+    /// This avoids the N+1 query pattern of calling [`Storage::get_chunk`]
+    /// per ID when only lightweight metadata is needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_chunk_metadata_batch(
+        &self,
+        ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, (i64, usize)>> {
+        if ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        // Build a parameterised IN clause.
+        let placeholders: String = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql =
+            format!("SELECT id, buffer_id, chunk_index FROM chunks WHERE id IN ({placeholders})");
+
+        let mut stmt = self.conn.prepare(&sql).map_err(StorageError::from)?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(ids), |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(StorageError::from)?;
+
+        let mut map = std::collections::HashMap::with_capacity(ids.len());
+        for row in rows {
+            let (id, buffer_id, index) = row.map_err(StorageError::from)?;
+            map.insert(id, (buffer_id, index as usize));
+        }
+        Ok(map)
+    }
+}
+
 // ==================== Embedding & Search Operations ====================
 
 impl SqliteStorage {
@@ -869,6 +916,89 @@ impl SqliteStorage {
 
         let results = stmt
             .query_map([], |row| {
+                let chunk_id: i64 = row.get(0)?;
+                let bytes: Vec<u8> = row.get(1)?;
+                let embedding: Vec<f32> = bytes
+                    .chunks_exact(4)
+                    .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                    .collect();
+                Ok((chunk_id, embedding))
+            })
+            .map_err(StorageError::from)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::from)?;
+
+        Ok(results)
+    }
+
+    /// Performs BM25 full-text search scoped to a specific buffer.
+    ///
+    /// Joins the FTS5 virtual table with the chunks table to filter by `buffer_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the search fails.
+    #[allow(clippy::cast_possible_wrap)]
+    pub fn search_fts_buffer(
+        &self,
+        query: &str,
+        buffer_id: i64,
+        limit: usize,
+    ) -> Result<Vec<(i64, f64)>> {
+        let fts_query = query
+            .split_whitespace()
+            .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+
+        let mut stmt = self
+            .conn
+            .prepare(
+                r"
+                SELECT f.rowid, -bm25(chunks_fts) as score
+                FROM chunks_fts f
+                JOIN chunks c ON c.id = f.rowid
+                WHERE chunks_fts MATCH ?
+                  AND c.buffer_id = ?
+                ORDER BY score DESC
+                LIMIT ?
+            ",
+            )
+            .map_err(StorageError::from)?;
+
+        let results = stmt
+            .query_map(params![fts_query, buffer_id, limit as i64], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)?))
+            })
+            .map_err(StorageError::from)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(StorageError::from)?;
+
+        Ok(results)
+    }
+
+    /// Returns chunk embeddings scoped to a specific buffer.
+    ///
+    /// Joins `chunk_embeddings` with `chunks` to filter by `buffer_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub fn get_embeddings_for_buffer(&self, buffer_id: i64) -> Result<Vec<(i64, Vec<f32>)>> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                r"
+                SELECT ce.chunk_id, ce.embedding
+                FROM chunk_embeddings ce
+                JOIN chunks c ON c.id = ce.chunk_id
+                WHERE c.buffer_id = ?
+            ",
+            )
+            .map_err(StorageError::from)?;
+
+        let results = stmt
+            .query_map(params![buffer_id], |row| {
                 let chunk_id: i64 = row.get(0)?;
                 let bytes: Vec<u8> = row.get(1)?;
                 let embedding: Vec<f32> = bytes

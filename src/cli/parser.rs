@@ -400,6 +400,117 @@ Input format (JSON array of analyst findings):
     /// Chunk operations (get, list, embed).
     #[command(subcommand)]
     Chunk(ChunkCommands),
+
+    /// Query a buffer using agentic LLM analysis.
+    ///
+    /// Fans out analysis across chunks using concurrent LLM subcalls,
+    /// then synthesizes a coherent response. The synthesizer can call
+    /// internal tools (`get_chunks`, `search`, `grep_chunks`) to verify and
+    /// enrich findings. Requires the `agent` feature and an
+    /// OpenAI-compatible API key.
+    #[cfg(feature = "agent")]
+    #[command(after_help = r#"Examples:
+  rlm-rs query "How does error handling work?" --buffer main-source
+  rlm-rs query "Find security vulnerabilities" --buffer app-code
+  rlm-rs query "Summarize the architecture" --concurrency 20
+  rlm-rs query "What patterns are used?" --search-mode semantic
+  rlm-rs query "Compare X across all sections" --skip-plan --verbose
+  OPENAI_API_KEY=sk-... rlm-rs query "explain auth flow" --buffer api
+"#)]
+    Query {
+        /// The query to analyze.
+        query: String,
+
+        /// Buffer to scope the analysis (ID or name).
+        #[arg(short, long)]
+        buffer: Option<String>,
+
+        /// Maximum concurrent API calls.
+        #[arg(long, default_value = "50")]
+        concurrency: usize,
+
+        /// Chunks per subcall batch. When omitted, the primary agent's plan
+        /// or config default is used.
+        #[arg(long)]
+        batch_size: Option<usize>,
+
+        /// Model for subcall agents.
+        #[arg(long)]
+        subcall_model: Option<String>,
+
+        /// Model for the synthesizer agent.
+        #[arg(long)]
+        synthesizer_model: Option<String>,
+
+        /// Search mode (hybrid, semantic, bm25). When omitted, the primary
+        /// agent's plan or config default is used.
+        #[arg(long)]
+        search_mode: Option<String>,
+
+        /// Minimum similarity threshold for search results. When omitted,
+        /// the primary agent's plan or config default (0.3) is used.
+        #[arg(long = "similarity-threshold")]
+        similarity_threshold: Option<f32>,
+
+        /// Maximum chunks to analyze (0 = unlimited).
+        #[arg(long, default_value = "0")]
+        max_chunks: usize,
+
+        /// Search depth: maximum results retrieved from the search layer
+        /// before batching. For hybrid search, the layer retrieves 2x this
+        /// value (semantic + BM25) before rank fusion. Higher values surface
+        /// more chunks at the cost of including lower-relevance results.
+        /// When omitted, the primary agent's plan or config default (200)
+        /// is used.
+        #[arg(long)]
+        top_k: Option<usize>,
+
+        /// Target number of concurrent subagents. When set, batch size is
+        /// computed automatically as `ceil(chunks / num_agents)`.
+        #[arg(long, conflicts_with = "batch_size")]
+        num_agents: Option<usize>,
+
+        /// Minimum relevance level for findings passed to the synthesizer.
+        /// Values: none, low, medium, high. When omitted, defaults to "low"
+        /// (filters out "none" relevance findings).
+        #[arg(long)]
+        finding_threshold: Option<String>,
+
+        /// Directory containing prompt template files.
+        ///
+        /// Overrides the `RLM_PROMPT_DIR` environment variable and
+        /// the default `~/.config/rlm-rs/prompts/` location.
+        #[arg(long)]
+        prompt_dir: Option<PathBuf>,
+
+        /// Skip the planning step (saves tokens and latency when all
+        /// search parameters are specified via CLI flags).
+        #[arg(long)]
+        skip_plan: bool,
+
+        /// Show detailed diagnostics: analyzed chunk IDs, batch errors,
+        /// per-batch timing, and search parameters.
+        #[arg(long, short)]
+        verbose: bool,
+    },
+
+    /// Write default prompt templates to disk for customization.
+    ///
+    /// Creates markdown template files in the prompt directory so users
+    /// can customize agent system prompts without recompiling.
+    #[cfg(feature = "agent")]
+    #[command(name = "init-prompts")]
+    #[command(after_help = r#"Examples:
+  rlm-rs init-prompts                              # Write to ~/.config/rlm-rs/prompts/
+  rlm-rs init-prompts --dir ./my-prompts           # Write to custom directory
+"#)]
+    InitPrompts {
+        /// Target directory for prompt templates.
+        ///
+        /// Defaults to `~/.config/rlm-rs/prompts/`.
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
 }
 
 /// Chunk subcommands for pass-by-reference retrieval.

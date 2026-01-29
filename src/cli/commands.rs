@@ -203,6 +203,44 @@ pub fn execute(cli: &Cli) -> Result<String> {
             }
             ChunkCommands::Status => cmd_chunk_status(&db_path, format),
         },
+        #[cfg(feature = "agent")]
+        Commands::Query {
+            query,
+            buffer,
+            concurrency,
+            batch_size,
+            subcall_model,
+            synthesizer_model,
+            search_mode,
+            similarity_threshold,
+            max_chunks,
+            top_k,
+            num_agents,
+            finding_threshold,
+            skip_plan,
+            prompt_dir,
+            verbose,
+        } => cmd_query(
+            &db_path,
+            query,
+            buffer.as_deref(),
+            *concurrency,
+            *batch_size,
+            subcall_model.as_deref(),
+            synthesizer_model.as_deref(),
+            search_mode.as_deref(),
+            *similarity_threshold,
+            *max_chunks,
+            *top_k,
+            *num_agents,
+            finding_threshold.as_deref(),
+            *skip_plan,
+            prompt_dir.as_deref(),
+            *verbose,
+            format,
+        ),
+        #[cfg(feature = "agent")]
+        Commands::InitPrompts { dir } => cmd_init_prompts(dir.as_deref(), format),
     }
 }
 
@@ -218,7 +256,12 @@ fn open_storage(db_path: &std::path::Path) -> Result<SqliteStorage> {
 }
 
 /// Resolves a buffer identifier (ID or name) to a buffer.
-fn resolve_buffer(storage: &SqliteStorage, identifier: &str) -> Result<Buffer> {
+///
+/// # Errors
+///
+/// Returns an error if the identifier cannot be parsed and no buffer
+/// matches by name, or if a storage operation fails.
+pub fn resolve_buffer(storage: &SqliteStorage, identifier: &str) -> Result<Buffer> {
     // Try as ID first
     if let Ok(id) = identifier.parse::<i64>()
         && let Some(buffer) = storage.get_buffer(id)?
@@ -239,7 +282,7 @@ fn resolve_buffer(storage: &SqliteStorage, identifier: &str) -> Result<Buffer> {
 
 // ==================== Command Implementations ====================
 
-fn cmd_init(db_path: &std::path::Path, force: bool, _format: OutputFormat) -> Result<String> {
+fn cmd_init(db_path: &std::path::Path, force: bool, format: OutputFormat) -> Result<String> {
     // Check if already exists
     if db_path.exists() && !force {
         return Err(CommandError::ExecutionFailed(
@@ -271,10 +314,20 @@ fn cmd_init(db_path: &std::path::Path, force: bool, _format: OutputFormat) -> Re
     let context = Context::new();
     storage.save_context(&context)?;
 
-    Ok(format!(
-        "Initialized RLM database at: {}\n",
-        db_path.display()
-    ))
+    match format {
+        OutputFormat::Text => Ok(format!(
+            "Initialized RLM database at: {}\n",
+            db_path.display()
+        )),
+        OutputFormat::Json | OutputFormat::Ndjson => {
+            let json = serde_json::json!({
+                "success": true,
+                "path": db_path.to_string_lossy(),
+                "force": force
+            });
+            Ok(format.to_json(&json))
+        }
+    }
 }
 
 fn cmd_status(db_path: &std::path::Path, format: OutputFormat) -> Result<String> {
@@ -283,7 +336,7 @@ fn cmd_status(db_path: &std::path::Path, format: OutputFormat) -> Result<String>
     Ok(format_status(&stats, format))
 }
 
-fn cmd_reset(db_path: &std::path::Path, yes: bool, _format: OutputFormat) -> Result<String> {
+fn cmd_reset(db_path: &std::path::Path, yes: bool, format: OutputFormat) -> Result<String> {
     if !yes {
         // In a real implementation, we'd prompt the user
         // For now, require --yes flag
@@ -300,7 +353,13 @@ fn cmd_reset(db_path: &std::path::Path, yes: bool, _format: OutputFormat) -> Res
     let context = Context::new();
     storage.save_context(&context)?;
 
-    Ok("RLM state reset successfully.\n".to_string())
+    match format {
+        OutputFormat::Text => Ok("RLM state reset successfully.\n".to_string()),
+        OutputFormat::Json | OutputFormat::Ndjson => {
+            let json = serde_json::json!({ "success": true, "action": "reset" });
+            Ok(format.to_json(&json))
+        }
+    }
 }
 
 fn cmd_load(
@@ -375,7 +434,7 @@ fn cmd_load(
                 "size": content.len(),
                 "source": file.to_string_lossy()
             });
-            Ok(serde_json::to_string_pretty(&result).unwrap_or_default())
+            Ok(format.to_json(&result))
         }
     }
 }
@@ -408,7 +467,7 @@ fn cmd_delete_buffer(
     db_path: &std::path::Path,
     identifier: &str,
     yes: bool,
-    _format: OutputFormat,
+    format: OutputFormat,
 ) -> Result<String> {
     if !yes {
         return Err(
@@ -429,7 +488,18 @@ fn cmd_delete_buffer(
         storage.save_context(&context)?;
     }
 
-    Ok(format!("Deleted buffer: {buffer_name}\n"))
+    match format {
+        OutputFormat::Text => Ok(format!("Deleted buffer: {buffer_name}\n")),
+        OutputFormat::Json | OutputFormat::Ndjson => {
+            let json = serde_json::json!({
+                "success": true,
+                "action": "delete_buffer",
+                "buffer_id": buffer_id,
+                "buffer_name": buffer_name
+            });
+            Ok(format.to_json(&json))
+        }
+    }
 }
 
 fn cmd_peek(
@@ -605,12 +675,12 @@ fn cmd_add_buffer(
                 "name": name,
                 "size": content.len()
             });
-            Ok(serde_json::to_string_pretty(&result).unwrap_or_default())
+            Ok(format.to_json(&result))
         }
     }
 }
 
-#[allow(clippy::too_many_arguments, clippy::redundant_clone)]
+#[allow(clippy::too_many_arguments)]
 fn cmd_update_buffer(
     db_path: &std::path::Path,
     identifier: &str,
@@ -651,16 +721,16 @@ fn cmd_update_buffer(
     let updated_buffer = Buffer {
         id: Some(buffer_id),
         name: buffer.name.clone(),
-        content: new_content.clone(),
+        content: new_content,
         source: buffer.source.clone(),
-        metadata: buffer.metadata.clone(),
+        metadata: buffer.metadata,
     };
     storage.update_buffer(&updated_buffer)?;
 
     // Re-chunk the content
     let chunker = create_chunker(strategy)?;
     let meta = ChunkerMetadata::with_size_and_overlap(chunk_size, overlap);
-    let chunks = chunker.chunk(buffer_id, &new_content, Some(&meta))?;
+    let chunks = chunker.chunk(buffer_id, &updated_buffer.content, Some(&meta))?;
     let new_chunk_count = chunks.len();
     storage.add_chunks(buffer_id, &chunks)?;
 
@@ -710,38 +780,28 @@ fn cmd_update_buffer(
                     "model": r.model_name
                 }))
             });
-            Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
+            Ok(format.to_json(&json))
         }
     }
 }
 
+use crate::core::Relevance;
+
 /// Analyst finding from a subagent.
+///
+/// Mirrors `agent::finding::Finding` but is available without the `agent`
+/// feature gate. Kept as a separate type so `cmd_aggregate` works
+/// unconditionally.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 struct AnalystFinding {
     chunk_id: i64,
-    relevance: String,
+    relevance: Relevance,
     #[serde(default)]
     findings: Vec<String>,
     #[serde(default)]
     summary: Option<String>,
     #[serde(default)]
     follow_up: Vec<String>,
-}
-
-/// Relevance level for sorting.
-fn relevance_order(relevance: &str) -> u8 {
-    match relevance.to_lowercase().as_str() {
-        "high" => 0,
-        "medium" => 1,
-        "low" => 2,
-        "none" => 3,
-        _ => 4,
-    }
-}
-
-/// Check if relevance meets minimum threshold.
-fn meets_relevance_threshold(relevance: &str, min_relevance: &str) -> bool {
-    relevance_order(relevance) <= relevance_order(min_relevance)
 }
 
 fn cmd_aggregate(
@@ -772,15 +832,16 @@ fn cmd_aggregate(
         .map_err(|e| CommandError::ExecutionFailed(format!("Invalid JSON input: {e}")))?;
 
     // Filter by relevance
+    let threshold = Relevance::parse(min_relevance);
     let filtered: Vec<_> = findings
         .into_iter()
-        .filter(|f| meets_relevance_threshold(&f.relevance, min_relevance))
+        .filter(|f| f.relevance.meets_threshold(threshold))
         .collect();
 
     // Sort findings
     let mut sorted = filtered;
     match sort_by {
-        "relevance" => sorted.sort_by_key(|f| relevance_order(&f.relevance)),
+        "relevance" => sorted.sort_by_key(|f| f.relevance),
         "chunk_id" => sorted.sort_by_key(|f| f.chunk_id),
         "findings_count" => sorted.sort_by_key(|f| std::cmp::Reverse(f.findings.len())),
         _ => {}
@@ -791,7 +852,7 @@ fn cmd_aggregate(
         "relevance" => {
             let mut map = std::collections::BTreeMap::new();
             for f in &sorted {
-                map.entry(f.relevance.clone())
+                map.entry(f.relevance.to_string())
                     .or_insert_with(Vec::new)
                     .push(f);
             }
@@ -825,9 +886,18 @@ fn cmd_aggregate(
 
     // Build summary stats
     let total_findings = sorted.len();
-    let high_count = sorted.iter().filter(|f| f.relevance == "high").count();
-    let medium_count = sorted.iter().filter(|f| f.relevance == "medium").count();
-    let low_count = sorted.iter().filter(|f| f.relevance == "low").count();
+    let high_count = sorted
+        .iter()
+        .filter(|f| f.relevance == Relevance::High)
+        .count();
+    let medium_count = sorted
+        .iter()
+        .filter(|f| f.relevance == Relevance::Medium)
+        .count();
+    let low_count = sorted
+        .iter()
+        .filter(|f| f.relevance == Relevance::Low)
+        .count();
     let unique_findings_count = all_findings.len();
 
     // Store in output buffer if requested
@@ -884,11 +954,12 @@ fn cmd_aggregate(
                 "all_findings_deduplicated": all_findings,
                 "output_buffer": output_buffer
             });
-            Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
+            Ok(format.to_json(&json))
         }
     }
 }
 
+/// Export always writes raw JSON regardless of format (the data is inherently JSON).
 fn cmd_export_buffers(
     db_path: &std::path::Path,
     output: Option<&std::path::Path>,
@@ -937,9 +1008,7 @@ fn cmd_variable(
             || Ok(format!("Variable '{name}' not found\n")),
             |v| match format {
                 OutputFormat::Text => Ok(format!("{name} = {v:?}\n")),
-                OutputFormat::Json | OutputFormat::Ndjson => {
-                    Ok(serde_json::to_string_pretty(v).unwrap_or_default())
-                }
+                OutputFormat::Json | OutputFormat::Ndjson => Ok(format.to_json(v)),
             },
         )
     }
@@ -970,9 +1039,7 @@ fn cmd_global(
             || Ok(format!("Global '{name}' not found\n")),
             |v| match format {
                 OutputFormat::Text => Ok(format!("{name} = {v:?}\n")),
-                OutputFormat::Json | OutputFormat::Ndjson => {
-                    Ok(serde_json::to_string_pretty(v).unwrap_or_default())
-                }
+                OutputFormat::Json | OutputFormat::Ndjson => Ok(format.to_json(v)),
             },
         )
     }
@@ -1008,17 +1075,10 @@ fn cmd_dispatch(
         // Filter chunks by search relevance
         let embedder = create_embedder()?;
 
-        let (use_semantic, use_bm25) = match mode.to_lowercase().as_str() {
-            "semantic" => (true, false),
-            "bm25" => (false, true),
-            _ => (true, true),
-        };
-
         let config = SearchConfig::new()
             .with_top_k(chunks.len()) // Get all matches
             .with_threshold(threshold)
-            .with_semantic(use_semantic)
-            .with_bm25(use_bm25);
+            .with_mode(&mode.to_lowercase());
 
         let results = hybrid_search(&storage, embedder.as_ref(), query_str, &config)?;
 
@@ -1103,7 +1163,7 @@ fn cmd_dispatch(
                     })
                 }).collect::<Vec<_>>()
             });
-            Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
+            Ok(format.to_json(&json))
         }
     }
 }
@@ -1126,21 +1186,7 @@ fn cmd_search(
     let storage = open_storage(db_path)?;
     let embedder = create_embedder()?;
 
-    // Determine search mode
-    let (use_semantic, use_bm25) = match mode.to_lowercase().as_str() {
-        "semantic" => (true, false),
-        "bm25" => (false, true),
-        _ => (true, true), // hybrid is default
-    };
-
-    let config = SearchConfig::new()
-        .with_top_k(top_k)
-        .with_threshold(threshold)
-        .with_rrf_k(rrf_k)
-        .with_semantic(use_semantic)
-        .with_bm25(use_bm25);
-
-    // If buffer filter is specified, validate it exists
+    // If buffer filter is specified, validate it exists and scope the search
     let buffer_id = if let Some(identifier) = buffer_filter {
         let buffer = resolve_buffer(&storage, identifier)?;
         buffer.id
@@ -1148,22 +1194,14 @@ fn cmd_search(
         None
     };
 
-    let results = hybrid_search(&storage, embedder.as_ref(), query, &config)?;
+    let config = SearchConfig::new()
+        .with_top_k(top_k)
+        .with_threshold(threshold)
+        .with_rrf_k(rrf_k)
+        .with_mode(&mode.to_lowercase())
+        .with_buffer_id(buffer_id);
 
-    // Filter by buffer if specified
-    let mut results: Vec<SearchResult> = if let Some(bid) = buffer_id {
-        let buffer_chunks: std::collections::HashSet<i64> = storage
-            .get_chunks(bid)?
-            .iter()
-            .filter_map(|c| c.id)
-            .collect();
-        results
-            .into_iter()
-            .filter(|r| buffer_chunks.contains(&r.chunk_id))
-            .collect()
-    } else {
-        results
-    };
+    let mut results = hybrid_search(&storage, embedder.as_ref(), query, &config)?;
 
     // Populate content previews if requested
     if preview {
@@ -1253,7 +1291,7 @@ fn format_search_results(
                     obj
                 }).collect::<Vec<_>>()
             });
-            serde_json::to_string_pretty(&json).unwrap_or_default()
+            format.to_json(&json)
         }
     }
 }
@@ -1308,7 +1346,7 @@ fn cmd_chunk_get(
                 "size": chunk.size(),
                 "content": chunk.content
             });
-            Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
+            Ok(format.to_json(&json))
         }
     }
 }
@@ -1420,7 +1458,7 @@ fn cmd_chunk_list(
                     obj
                 }).collect::<Vec<_>>()
             });
-            Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
+            Ok(format.to_json(&json))
         }
     }
 }
@@ -1511,7 +1549,7 @@ fn cmd_chunk_embed(
                 "completion_percentage": result.completion_percentage(),
                 "model_warning": model_warning
             });
-            Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
+            Ok(format.to_json(&json))
         }
     }
 }
@@ -1599,19 +1637,226 @@ fn cmd_chunk_status(db_path: &std::path::Path, format: OutputFormat) -> Result<S
                     })
                 }).collect::<Vec<_>>()
             });
-            Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
+            Ok(format.to_json(&json))
         }
     }
 }
 
 /// Truncates a string to max length with ellipsis.
+///
+/// Uses [`find_char_boundary`] to avoid panicking on multi-byte UTF-8 characters.
 fn truncate_str(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
     } else if max_len <= 3 {
-        s[..max_len].to_string()
+        let end = crate::io::find_char_boundary(s, max_len);
+        s[..end].to_string()
     } else {
-        format!("{}...", &s[..max_len - 3])
+        let end = crate::io::find_char_boundary(s, max_len - 3);
+        format!("{}...", &s[..end])
+    }
+}
+
+// ==================== Agent Query Command ====================
+
+#[cfg(feature = "agent")]
+#[allow(clippy::too_many_arguments)]
+fn cmd_query(
+    db_path: &std::path::Path,
+    query: &str,
+    buffer: Option<&str>,
+    concurrency: usize,
+    batch_size: Option<usize>,
+    subcall_model: Option<&str>,
+    synthesizer_model: Option<&str>,
+    search_mode: Option<&str>,
+    threshold: Option<f32>,
+    max_chunks: usize,
+    top_k: Option<usize>,
+    num_agents: Option<usize>,
+    finding_threshold: Option<&str>,
+    skip_plan: bool,
+    prompt_dir: Option<&std::path::Path>,
+    verbose: bool,
+    format: OutputFormat,
+) -> Result<String> {
+    use crate::agent::client::create_provider;
+    use crate::agent::config::AgentConfig;
+    use crate::agent::orchestrator::{CliOverrides, Orchestrator};
+    use std::sync::Arc;
+
+    let storage = open_storage(db_path)?;
+
+    // Resolve buffer identifier (ID or name) to a buffer name
+    let resolved_buffer_name: Option<String> = if let Some(ident) = buffer {
+        let buf = resolve_buffer(&storage, ident)?;
+        buf.name
+    } else {
+        None
+    };
+
+    // Build agent configuration from env + CLI overrides
+    let mut builder = AgentConfig::builder().from_env();
+    builder = builder.max_concurrency(concurrency);
+    if let Some(bs) = batch_size {
+        builder = builder.batch_size(bs);
+    }
+    if let Some(k) = top_k {
+        builder = builder.search_top_k(k);
+    }
+    if let Some(model) = subcall_model {
+        builder = builder.subcall_model(model);
+    }
+    if let Some(model) = synthesizer_model {
+        builder = builder.synthesizer_model(model);
+    }
+    if let Some(dir) = prompt_dir {
+        builder = builder.prompt_dir(dir);
+    }
+
+    let config = builder.build().map_err(|e| {
+        crate::error::CommandError::ExecutionFailed(format!("Agent configuration error: {e}"))
+    })?;
+
+    let provider = create_provider(&config).map_err(|e| {
+        crate::error::CommandError::ExecutionFailed(format!("Provider creation failed: {e}"))
+    })?;
+
+    let orchestrator = Orchestrator::new(Arc::from(provider), config);
+
+    let cli_overrides = CliOverrides {
+        search_mode: search_mode.map(String::from),
+        batch_size,
+        threshold,
+        max_chunks: if max_chunks > 0 {
+            Some(max_chunks)
+        } else {
+            None
+        },
+        top_k,
+        num_agents,
+        finding_threshold: finding_threshold.map(Relevance::parse),
+        skip_plan,
+    };
+
+    // Create tokio runtime as sync/async bridge
+    let rt = tokio::runtime::Runtime::new().map_err(|e| {
+        crate::error::CommandError::ExecutionFailed(format!("Failed to create async runtime: {e}"))
+    })?;
+
+    let result = rt.block_on(async {
+        orchestrator
+            .query(
+                &storage,
+                query,
+                resolved_buffer_name.as_deref(),
+                Some(cli_overrides),
+            )
+            .await
+    });
+
+    match result {
+        Ok(query_result) => match format {
+            OutputFormat::Text => {
+                let mut output = query_result.response;
+                let filtered_hint = if query_result.findings_filtered > 0 {
+                    format!(" ({} filtered)", query_result.findings_filtered)
+                } else {
+                    String::new()
+                };
+                let load_hint = if query_result.chunk_load_failures > 0 {
+                    format!(" ({} load failures)", query_result.chunk_load_failures)
+                } else {
+                    String::new()
+                };
+                output.push_str(&format!(
+                    "\n\n---\nChunks: {}/{} analyzed{load_hint} | Findings: {}{filtered_hint} | Batches: {} ok, {} failed | Tokens: {} | Time: {:.1}s",
+                    query_result.chunks_analyzed,
+                    query_result.chunks_available,
+                    query_result.findings_count,
+                    query_result.batches_processed,
+                    query_result.batches_failed,
+                    query_result.total_tokens,
+                    query_result.elapsed.as_secs_f64()
+                ));
+                for err in &query_result.batch_errors {
+                    output.push_str(&format!("\nBatch error: {err}"));
+                }
+                if verbose {
+                    let ids: Vec<String> = query_result
+                        .analyzed_chunk_ids
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect();
+                    output.push_str(&format!("\nAnalyzed chunk IDs: [{}]", ids.join(", ")));
+                }
+                Ok(output)
+            }
+            OutputFormat::Json | OutputFormat::Ndjson => {
+                serde_json::to_string_pretty(&query_result).map_err(|e| {
+                    crate::error::CommandError::OutputFormat(format!(
+                        "JSON serialization failed: {e}"
+                    ))
+                    .into()
+                })
+            }
+        },
+        Err(e) => {
+            Err(crate::error::CommandError::ExecutionFailed(format!("Query failed: {e}")).into())
+        }
+    }
+}
+
+#[cfg(feature = "agent")]
+fn cmd_init_prompts(dir: Option<&std::path::Path>, format: OutputFormat) -> Result<String> {
+    use crate::agent::prompt::PromptSet;
+
+    let target_dir = dir
+        .map(std::path::PathBuf::from)
+        .or_else(PromptSet::default_dir)
+        .ok_or_else(|| {
+            CommandError::ExecutionFailed(
+                "Could not determine home directory for default prompt path".to_string(),
+            )
+        })?;
+
+    let written = PromptSet::write_defaults(&target_dir).map_err(|e| {
+        CommandError::ExecutionFailed(format!("Failed to write prompt templates: {e}"))
+    })?;
+
+    match format {
+        OutputFormat::Text => {
+            if written.is_empty() {
+                Ok(format!(
+                    "All prompt templates already exist in: {}\n",
+                    target_dir.display()
+                ))
+            } else {
+                let mut output = format!(
+                    "Wrote {} prompt template(s) to: {}\n",
+                    written.len(),
+                    target_dir.display()
+                );
+                for path in &written {
+                    output.push_str(&format!(
+                        "  {}\n",
+                        path.file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("unknown")
+                    ));
+                }
+                output.push_str("\nEdit these files to customize agent system prompts.\n");
+                Ok(output)
+            }
+        }
+        OutputFormat::Json | OutputFormat::Ndjson => {
+            let json = serde_json::json!({
+                "directory": target_dir.to_string_lossy(),
+                "written": written.iter().map(|p| p.to_string_lossy().into_owned()).collect::<Vec<_>>(),
+                "count": written.len()
+            });
+            Ok(format.to_json(&json))
+        }
     }
 }
 

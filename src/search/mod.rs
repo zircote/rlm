@@ -57,6 +57,8 @@ pub struct SearchConfig {
     pub use_semantic: bool,
     /// Whether to include BM25 search.
     pub use_bm25: bool,
+    /// Optional buffer ID to scope the search to a single buffer.
+    pub buffer_id: Option<i64>,
 }
 
 impl Default for SearchConfig {
@@ -67,6 +69,7 @@ impl Default for SearchConfig {
             rrf_k: 60,
             use_semantic: true,
             use_bm25: true,
+            buffer_id: None,
         }
     }
 }
@@ -75,30 +78,52 @@ impl Default for SearchConfig {
 pub const DEFAULT_PREVIEW_LEN: usize = 150;
 
 impl SearchResult {
-    /// Creates a new search result, looking up chunk metadata from storage.
+    /// Creates a search result from pre-fetched metadata.
     ///
-    /// Returns `None` if the chunk cannot be found.
-    fn from_chunk_id(
-        storage: &SqliteStorage,
+    /// Use [`build_results_batch`] to construct multiple results efficiently.
+    const fn new(
         chunk_id: i64,
+        buffer_id: i64,
+        index: usize,
         score: f64,
         semantic_score: Option<f32>,
         bm25_score: Option<f64>,
-    ) -> Option<Self> {
-        storage
-            .get_chunk(chunk_id)
-            .ok()
-            .flatten()
-            .map(|chunk| Self {
-                chunk_id,
-                buffer_id: chunk.buffer_id,
-                index: chunk.index,
-                score,
-                semantic_score,
-                bm25_score,
-                content_preview: None,
-            })
+    ) -> Self {
+        Self {
+            chunk_id,
+            buffer_id,
+            index,
+            score,
+            semantic_score,
+            bm25_score,
+            content_preview: None,
+        }
     }
+}
+
+/// Batch-constructs search results from scored chunk IDs.
+///
+/// Performs a single SQL query to fetch `(buffer_id, index)` for all chunk
+/// IDs, avoiding the N+1 pattern of per-ID lookups. Chunks that cannot be
+/// found in storage are silently omitted.
+fn build_results_batch(
+    storage: &SqliteStorage,
+    scored: &[(i64, f64, Option<f32>, Option<f64>)],
+) -> Vec<SearchResult> {
+    let ids: Vec<i64> = scored.iter().map(|(id, _, _, _)| *id).collect();
+    let Ok(meta) = storage.get_chunk_metadata_batch(&ids) else {
+        return Vec::new();
+    };
+
+    scored
+        .iter()
+        .filter_map(|&(chunk_id, score, sem, bm25)| {
+            let &(buffer_id, index) = meta.get(&chunk_id)?;
+            Some(SearchResult::new(
+                chunk_id, buffer_id, index, score, sem, bm25,
+            ))
+        })
+        .collect()
 }
 
 /// Populates content previews for search results.
@@ -178,6 +203,36 @@ impl SearchConfig {
         self.use_bm25 = enabled;
         self
     }
+
+    /// Scopes the search to a single buffer.
+    #[must_use]
+    pub const fn with_buffer_id(mut self, buffer_id: Option<i64>) -> Self {
+        self.buffer_id = buffer_id;
+        self
+    }
+
+    /// Configures semantic/BM25 flags from a mode string.
+    ///
+    /// Accepted values: `"semantic"`, `"bm25"`, or anything else (treated as
+    /// `"hybrid"` — both enabled).
+    #[must_use]
+    pub fn with_mode(mut self, mode: &str) -> Self {
+        match mode {
+            "semantic" => {
+                self.use_semantic = true;
+                self.use_bm25 = false;
+            }
+            "bm25" => {
+                self.use_semantic = false;
+                self.use_bm25 = true;
+            }
+            _ => {
+                self.use_semantic = true;
+                self.use_bm25 = true;
+            }
+        }
+        self
+    }
 }
 
 /// Performs hybrid search combining semantic and BM25 results.
@@ -208,28 +263,30 @@ pub fn hybrid_search(
 
     // BM25 search
     if config.use_bm25 {
-        bm25_results = storage.search_fts(query, config.top_k * 2)?;
+        bm25_results = if let Some(bid) = config.buffer_id {
+            storage.search_fts_buffer(query, bid, config.top_k * 2)?
+        } else {
+            storage.search_fts(query, config.top_k * 2)?
+        };
     }
 
     // If only one type of search is enabled, return those results directly
     if !config.use_semantic {
-        return Ok(bm25_results
+        let scored: Vec<_> = bm25_results
             .into_iter()
             .take(config.top_k)
-            .filter_map(|(chunk_id, score)| {
-                SearchResult::from_chunk_id(storage, chunk_id, score, None, Some(score))
-            })
-            .collect());
+            .map(|(id, score)| (id, score, None, Some(score)))
+            .collect();
+        return Ok(build_results_batch(storage, &scored));
     }
 
     if !config.use_bm25 {
-        return Ok(semantic_results
+        let scored: Vec<_> = semantic_results
             .into_iter()
             .take(config.top_k)
-            .filter_map(|(chunk_id, score)| {
-                SearchResult::from_chunk_id(storage, chunk_id, f64::from(score), Some(score), None)
-            })
-            .collect());
+            .map(|(id, score)| (id, f64::from(score), Some(score), None))
+            .collect();
+        return Ok(build_results_batch(storage, &scored));
     }
 
     // Combine using RRF
@@ -245,12 +302,11 @@ pub fn hybrid_search(
     let semantic_map: std::collections::HashMap<i64, f32> = semantic_results.into_iter().collect();
     let bm25_map: std::collections::HashMap<i64, f64> = bm25_results.into_iter().collect();
 
-    let results: Vec<SearchResult> = fused
+    let scored: Vec<_> = fused
         .into_iter()
         .take(config.top_k)
-        .filter_map(|(chunk_id, rrf_score)| {
-            SearchResult::from_chunk_id(
-                storage,
+        .map(|(chunk_id, rrf_score)| {
+            (
                 chunk_id,
                 rrf_score,
                 semantic_map.get(&chunk_id).copied(),
@@ -259,7 +315,7 @@ pub fn hybrid_search(
         })
         .collect();
 
-    Ok(results)
+    Ok(build_results_batch(storage, &scored))
 }
 
 /// Performs semantic similarity search.
@@ -274,8 +330,12 @@ fn semantic_search(
     // Generate query embedding
     let query_embedding = embedder.embed(query)?;
 
-    // Get all embeddings from storage
-    let all_embeddings = storage.get_all_embeddings()?;
+    // Get embeddings — scoped to buffer when specified
+    let all_embeddings = if let Some(bid) = config.buffer_id {
+        storage.get_embeddings_for_buffer(bid)?
+    } else {
+        storage.get_all_embeddings()?
+    };
 
     if all_embeddings.is_empty() {
         return Ok(Vec::new());
@@ -347,12 +407,11 @@ pub fn search_bm25(
 ) -> Result<Vec<SearchResult>> {
     let results = storage.search_fts(query, top_k)?;
 
-    Ok(results
+    let scored: Vec<_> = results
         .into_iter()
-        .filter_map(|(chunk_id, score)| {
-            SearchResult::from_chunk_id(storage, chunk_id, score, None, Some(score))
-        })
-        .collect())
+        .map(|(id, score)| (id, score, None, Some(score)))
+        .collect();
+    Ok(build_results_batch(storage, &scored))
 }
 
 /// Generates and stores embeddings for all chunks in a buffer.
