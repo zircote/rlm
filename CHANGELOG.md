@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Agent**: Agentic LLM query engine (feature-gated: `agent`)
+  - Fan-out/collect pipeline: PrimaryAgent → Search → SubcallAgent×N → SynthesizerAgent
+  - `query` command for interactive codebase analysis via LLM
+  - Configurable concurrency, batch size, and relevance thresholds
+  - Tool-calling loop with internal function dispatch (`get_chunks`, `search`, `grep_chunks`, `get_buffer`, `list_buffers`, `storage_stats`)
+  - OpenAI-compatible provider with streaming support
+  - Customizable system prompts loaded from disk or environment
+- **Agent**: CLI override resolution chain (CLI → Plan → Config → Default)
+  - CLI arguments are now `Option` types so clap defaults don't shadow agent plan values
+- **Agent**: Cached embedder in `ToolExecutor` via `RefCell`
+  - Avoids recreating the ONNX model on every tool call during synthesis
+- **Agent**: Bounded grep memory with `MAX_GREP_CHUNKS` cap (5000 chunks)
 - **Chunking**: Code-aware chunker for language-specific boundaries
   - Supports Rust, Python, JavaScript, TypeScript, Go, Java, C/C++, Ruby, PHP
   - Splits at function, class, and method boundaries
@@ -18,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Optional feature: enable with `usearch-hnsw` feature flag
 - **Search**: Content preview in search results with `--preview` flag
   - Configurable length with `--preview-len` (default: 150 chars)
+- **Search**: Batch metadata lookup (`get_chunk_metadata_batch`) eliminates N+1 query pattern
+- **Search**: `SearchConfig::with_mode()` builder method for shared search mode parsing
+- **Search**: `SearchConfig::with_buffer_id()` for search-layer buffer scoping
 - **CLI**: `update-buffer` command to update buffer content with re-chunking
   - Supports `--embed` flag for automatic re-embedding
   - Incremental embedding (only new/changed chunks)
@@ -25,24 +40,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Split chunks into batches by size or worker count
   - Filter chunks by search query
 - **CLI**: `aggregate` command to combine analyst findings
-  - Filter by relevance level
+  - Filter by relevance level using shared `Relevance` enum
   - Group and sort findings
   - Store results in output buffer
+- **Core**: `Relevance` enum in `core` module (shared across agent and CLI)
+  - Replaces duplicated string-based relevance logic in `commands.rs`
+  - Provides `parse()`, `meets_threshold()`, `as_str()`, and `Display`
 - **Embedding**: Incremental embedding support
   - Only embeds new or changed chunks
   - Model version tracking for migration detection
 - **Embedding**: Model name tracking in `Embedder` trait
 - **Output**: NDJSON format support (`--format ndjson`)
+- **Testing**: Integration tests for `aggregate`, `dispatch`, and `Relevance` types
 - **Documentation**: ADRs for error handling, concurrency model, and feature flags
 - **Documentation**: MCP agentic workflow prompts (analyst, orchestrator, synthesizer)
 
 ### Changed
 
+- **Agent**: `fan_out` accepts `Arc<[LoadedChunk]>` to avoid unnecessary clone
+- **Agent**: `search_chunks` and `load_chunks` converted to associated functions
+  (removed `#[allow(clippy::unused_self)]`)
 - **Core**: Consolidated UTF-8 and timestamp utilities in io module
   - `find_char_boundary` and `current_timestamp` now shared across modules
 - **Core**: Improved token estimation with `estimate_tokens_accurate()` method
 - **Error**: Dedicated `Embedding` error variant in `StorageError`
 - **Embedding**: Removed unnecessary unsafe `Send`/`Sync` impls from `FallbackEmbedder`
+
+### Removed
+
+- **Agent**: Dead `ToolSet::subcall_tools()` method (subcall agents have no tools by design)
+- **Agent**: Dead `single_shot()` convenience wrapper in `agentic_loop`
+- **Agent**: Dead `assistant_message()` helper in `message`
+- **Agent**: Unused `AgentError` variants: `RateLimited`, `RetriesExhausted`, `Timeout`
+- **Agent**: Duplicate stream assignment in `OpenAiProvider::build_request`
+
+### Fixed
+
+- **Search**: USearch segfault via PR #704 move semantics fix
+- **CLI**: UTF-8 safe string truncation using `find_char_boundary` (prevents panic on multi-byte characters)
+- **CLI**: NDJSON format now emits newline-delimited single-line JSON (was identical to pretty-printed JSON)
+- **CLI**: `init`, `reset`, and `delete-buffer` commands now respect `--format json` flag
+- **Agent**: Unused error binding in subcall truncation handler
+- **CLI**: Redundant clone in `cmd_update_buffer` buffer construction
+- **Agent**: `get_buffer` tool schema now requires at least one property (`minProperties: 1`)
+- **Docs**: Unresolved intra-doc links in `Chunk` methods
+
+### Security
+
+- **Agent**: XML content tags replace markdown code fences in prompt assembly
+  - Chunk content wrapped in `<content>` tags within `<chunk>` elements
+  - Query wrapped in `<query>` tags, findings in `<findings>` tags
+  - Harder to escape via embedded triple-backtick content
+- **Agent**: Untrusted-data handling instructions in subcall and synthesizer system prompts
+  - Agents instructed to never interpret embedded directives as commands
+  - Output fidelity requirements prevent prompt injection via document content
+- **Agent**: Regex pattern validation before compilation in `grep_chunks`
+  - `MAX_REGEX_LEN` (500 bytes) prevents oversized patterns
+  - DFA size limit (1 MB) via `RegexBuilder` prevents ReDoS attacks
+- **Agent**: Tool argument size limits in executor
+  - `MAX_CHUNK_IDS` (200), `MAX_SEARCH_TOP_K` (500), `MAX_CONTEXT_LINES` (20)
+  - Raw tool arguments capped at 100 KB before dispatch
+- **Agent**: Query length validation (`MAX_QUERY_LEN` = 10,000 bytes) in orchestrator
+- **Agent**: Finding size limits in subcall response parsing
+  - `MAX_FINDINGS_PER_BATCH` (200), `MAX_FINDING_TEXT_LEN` (5,000 bytes), `MAX_FOLLOW_UPS` (10)
+  - `sanitize_findings()` truncates oversized responses after parsing
 
 ### Dependencies
 
@@ -162,3 +223,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.0.0]: https://github.com/zircote/rlm-rs/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/zircote/rlm-rs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/zircote/rlm-rs/releases/tag/v0.1.0
+[#5]: https://github.com/zircote/rlm-rs/pull/5
+[#6]: https://github.com/zircote/rlm-rs/pull/6
+[#7]: https://github.com/zircote/rlm-rs/pull/7
+[#8]: https://github.com/zircote/rlm-rs/pull/8
+[#9]: https://github.com/zircote/rlm-rs/pull/9

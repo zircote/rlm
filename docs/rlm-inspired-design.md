@@ -70,7 +70,8 @@ The paper treats chunking as a preprocessing step. rlm-rs makes it a first-class
 
 | Strategy | Algorithm | Best For |
 |----------|-----------|----------|
-| **Semantic** | Unicode sentence/paragraph boundaries | Markdown, code, prose |
+| **Semantic** | Unicode sentence/paragraph boundaries | Markdown, prose |
+| **Code** | Language-aware function/class boundaries | Source code files |
 | **Fixed** | Character boundaries with UTF-8 safety | Logs, raw text |
 | **Parallel** | Rayon-parallelized fixed chunking | Large files (>10MB) |
 
@@ -159,7 +160,7 @@ rlm-rs --format json search "authentication" --top-k 5
 ### 3. Zero External Dependencies at Runtime
 
 rlm-rs is a **single static binary** with embedded:
-- Embedding model (All-MiniLM-L6-v2 via fastembed)
+- Embedding model (BGE-M3 via fastembed, 1024 dimensions)
 - SQLite (via rusqlite)
 - Full-text search (FTS5)
 
@@ -227,11 +228,9 @@ A 10MB codebase (~2.5M tokens) can be:
 
 Building on the RLM foundation, planned extensions include:
 
-1. **Streaming Processing**: Process chunks as they're generated
-2. **Incremental Updates**: Re-embed only changed content
-3. **Cross-Buffer Search**: Find patterns across multiple documents
-4. **Agent Memory**: Persistent learning from previous analyses
-5. **Distributed Processing**: Parallel subagent execution
+1. **Cross-Buffer Search**: Find patterns across multiple documents
+2. **Agent Memory**: Persistent learning from previous analyses
+3. **Distributed Processing**: Parallel subagent execution
 
 ---
 

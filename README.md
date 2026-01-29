@@ -81,6 +81,7 @@ rlm-rs peek docs --start 0 --end 3000
 
 | Command | Description |
 |---------|-------------|
+| `query` | Agentic LLM analysis (requires `agent` feature) |
 | `init` | Initialize the RLM database |
 | `status` | Show current state (buffers, chunks, DB info) |
 | `load` | Load a file into a buffer with chunking (auto-embeds) |
@@ -172,11 +173,14 @@ src/
 ├── lib.rs           # Library entry point
 ├── main.rs          # CLI entry point
 ├── error.rs         # Error types
-├── core/            # Core types (Buffer, Chunk, Variable)
-├── chunking/        # Chunking strategies
+├── core/            # Core types (Buffer, Chunk, Context, Relevance)
+├── chunking/        # Chunking strategies (semantic, code, fixed, parallel)
+├── embedding/       # Embedding generation (BGE-M3 via fastembed)
+├── search/          # Hybrid search (semantic + BM25 with RRF)
 ├── storage/         # SQLite persistence
 ├── io/              # File I/O with mmap
-└── cli/             # Command implementations
+├── cli/             # Command implementations
+└── agent/           # Agentic query engine (feature: "agent")
 
 tests/
 └── integration_test.rs
