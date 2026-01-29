@@ -1,6 +1,6 @@
 [package]
 name = "rlm-rs"
-version = "1.2.3"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Recursive Language Model (RLM) REPL for Claude Code - handles long-context tasks via chunking and recursive sub-LLM calls"
@@ -54,6 +54,15 @@ fastembed = { version = "5", optional = true, default-features = false, features
 # Using git branch with move semantics fix until PR #704 is merged
 # See: https://github.com/unum-cloud/usearch/pull/704
 usearch = { git = "https://github.com/madmax983/USearch.git", branch = "fix/rust-move-semantics", optional = true }
+
+# Agent system (optional - for agentic query workflows)
+async-openai = { version = "0.27", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "io-util"], optional = true }
+tokio-stream = { version = "0.1", optional = true }
+futures-util = { version = "0.3", optional = true }
+async-trait = { version = "0.1", optional = true }
+tracing = { version = "0.1", optional = true }
+dirs = { version = "6", optional = true }
 
 [dev-dependencies]
 # Testing
@@ -123,9 +132,13 @@ redundant_pub_crate = "allow"
 
 [features]
 default = ["fastembed-embeddings"]
-# FastEmbed semantic embeddings (ONNX-based, all-MiniLM-L6-v2, 384 dimensions)
+# FastEmbed semantic embeddings (ONNX-based, BGE-M3, 1024 dimensions)
 fastembed-embeddings = ["dep:fastembed"]
 # usearch HNSW vector search (native implementation)
 usearch-hnsw = ["dep:usearch"]
 # Full semantic search (embeddings + vector search)
 full-search = ["fastembed-embeddings", "usearch-hnsw"]
+# Agentic query workflows (OpenAI-based fan-out/synthesis)
+agent = ["dep:async-openai", "dep:tokio", "dep:tokio-stream", "dep:futures-util", "dep:async-trait", "dep:tracing", "dep:dirs"]
+# Full agent with search capabilities
+full-agent = ["agent", "full-search"]

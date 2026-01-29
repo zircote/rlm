@@ -64,7 +64,7 @@ quick: build install
 
 # Install to ~/.cargo/bin
 install:
-	cargo install --path . --force
+	cargo install --path . --all-features --force
 
 # Clean build artifacts
 clean:
