@@ -154,7 +154,7 @@ pub enum InputSource {
 ```
 
 Key points:
-- Detect pipe vs TTY: `!atty::is(atty::Stream::Stdin)`
+- Detect pipe vs TTY: `!std::io::stdin().is_terminal()` (via `std::io::IsTerminal`, stable since Rust 1.70)
 - Use `BufReader` with 64KB buffer
 - Batch storage writes (100 chunks per transaction)
 - Progress to stderr (doesn't interfere with pipeline)

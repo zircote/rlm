@@ -12,7 +12,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rlm-rs = "1.2"
+rlm-rs = "2.0"
 ```
 
 Basic usage:
@@ -506,7 +506,7 @@ Enable full search capabilities with features:
 ```toml
 [dependencies]
 # Default: includes fastembed embeddings
-rlm-rs = "1.2"
+rlm-rs = "2.0"
 
 # Full search with HNSW index
 rlm-rs = { version = "1.2", features = ["full-search"] }
@@ -640,8 +640,11 @@ pub enum Error {
     Chunking(ChunkingError),
     Io(IoError),
     Command(CommandError),
+    Search(SearchError),
     InvalidState { message: String },
     Config { message: String },
+    #[cfg(feature = "agent")]
+    Agent(AgentError),
 }
 ```
 
@@ -657,6 +660,10 @@ pub enum StorageError {
     Migration(String),
     Transaction(String),
     Serialization(String),
+    #[cfg(feature = "usearch-hnsw")]
+    VectorSearch(String),
+    #[cfg(feature = "fastembed-embeddings")]
+    Embedding(String),
 }
 ```
 
@@ -729,13 +736,22 @@ The crate root re-exports commonly used types:
 pub use error::{Error, Result};
 
 // Core types
-pub use core::{Buffer, BufferMetadata, Chunk, ChunkMetadata, Context, ContextValue};
+pub use core::{
+    Buffer, BufferMetadata, Chunk, ChunkMetadata,
+    Context, ContextMetadata, ContextValue, Relevance,
+};
 
 // Storage
-pub use storage::{DEFAULT_DB_PATH, SqliteStorage, Storage};
+pub use storage::{DEFAULT_DB_PATH, SqliteStorage, Storage, StorageStats};
 
 // Chunking
 pub use chunking::{Chunker, FixedChunker, SemanticChunker, available_strategies, create_chunker};
+
+// Embedding
+pub use embedding::{Embedder, create_embedder};
+
+// Search
+pub use search::{SearchConfig, SearchResult};
 
 // CLI
 pub use cli::{Cli, Commands, OutputFormat};

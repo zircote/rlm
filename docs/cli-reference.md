@@ -10,7 +10,7 @@ These options apply to all commands:
 |--------|-------------|-------------|
 | `-d, --db-path <PATH>` | `RLM_DB_PATH` | Path to SQLite database (default: `.rlm/rlm-state.db`) |
 | `-v, --verbose` | | Enable verbose output |
-| `--format <FORMAT>` | | Output format: `text` (default) or `json` |
+| `--format <FORMAT>` | | Output format: `text` (default), `json`, or `ndjson` |
 | `-h, --help` | | Print help information |
 | `-V, --version` | | Print version |
 
@@ -498,6 +498,61 @@ rlm-rs --format json search "your query" --top-k 10
 ---
 
 ### Agentic Workflow Operations
+
+#### `query`
+
+Analyze a buffer using the agentic LLM pipeline. Fans out analysis across chunks using concurrent subcall agents, then synthesizes findings into a unified report.
+
+> **Requires:** `agent` feature flag and an OpenAI-compatible API key.
+
+```bash
+rlm-rs query <QUERY> [OPTIONS]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-b, --buffer <NAME\|ID>` | Buffer to scope the analysis |
+| `--concurrency <N>` | Maximum concurrent API calls (default: 50) |
+| `--batch-size <N>` | Chunks per subcall batch (overrides plan) |
+| `--subcall-model <MODEL>` | Model for subcall agents (e.g., `gpt-4o-mini`) |
+| `--synthesizer-model <MODEL>` | Model for the synthesizer agent |
+| `--search-mode <MODE>` | Search mode: `hybrid`, `semantic`, `bm25` |
+| `--similarity-threshold <F>` | Minimum similarity threshold (default: 0.3) |
+| `--max-chunks <N>` | Maximum chunks to analyze (0 = unlimited) |
+| `--top-k <N>` | Search depth: max results from search layer |
+| `--num-agents <N>` | Target concurrent subagents (auto-computes batch size) |
+| `--finding-threshold <LEVEL>` | Minimum relevance: `none`, `low`, `medium`, `high` |
+| `--prompt-dir <DIR>` | Directory containing prompt template files |
+| `--skip-plan` | Skip the planning step (use CLI flags directly) |
+| `-v, --verbose` | Show diagnostics: chunk IDs, batch errors, timing |
+
+**Environment Variables:**
+| Variable | Description |
+|----------|-------------|
+| `OPENAI_API_KEY` or `RLM_API_KEY` | API key for the LLM provider |
+| `RLM_SUBCALL_MODEL` | Default subcall model |
+| `RLM_SYNTHESIZER_MODEL` | Default synthesizer model |
+| `RLM_PRIMARY_MODEL` | Default primary/planning model |
+| `RLM_BATCH_SIZE` | Default batch size |
+| `RLM_PROMPT_DIR` | Default prompt template directory |
+
+**Examples:**
+```bash
+# Basic query
+OPENAI_API_KEY=sk-... rlm-rs query "explain the auth flow" --buffer api
+
+# Scoped with verbose diagnostics
+rlm-rs query "find error handling patterns" --buffer src --verbose
+
+# Custom model and batch size
+rlm-rs query "summarize architecture" --subcall-model gpt-4o --batch-size 5
+
+# Skip planning for faster execution
+rlm-rs query "list all endpoints" --buffer api --skip-plan --search-mode hybrid
+```
+
+---
 
 #### `update-buffer`
 

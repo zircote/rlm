@@ -432,22 +432,38 @@ src/
 ├── core/            # Core domain types
 │   ├── buffer.rs    # Buffer type
 │   ├── chunk.rs     # Chunk type
-│   └── context.rs   # Context/variables
+│   ├── context.rs   # Context/variables
+│   └── relevance.rs # Relevance enum (shared across agent and CLI)
 ├── chunking/        # Chunking strategies
 │   ├── traits.rs    # Chunker trait
 │   ├── fixed.rs     # Fixed chunker
 │   ├── semantic.rs  # Semantic chunker
+│   ├── code.rs      # Code-aware chunker
 │   └── parallel.rs  # Parallel chunker
+├── embedding/       # Embedding generation
+│   ├── mod.rs       # Embedder trait
+│   ├── fastembed_impl.rs  # BGE-M3 via fastembed
+│   └── fallback.rs  # Hash-based fallback
+├── search/          # Hybrid search
+│   ├── mod.rs       # Search orchestration and RRF
+│   ├── rrf.rs       # Reciprocal Rank Fusion
+│   └── hnsw.rs      # HNSW vector index (optional)
 ├── storage/         # Persistence
 │   ├── traits.rs    # Storage trait
-│   └── sqlite.rs    # SQLite backend
+│   ├── sqlite.rs    # SQLite backend
+│   └── schema.rs    # Schema migrations
 ├── io/              # File I/O
 │   ├── reader.rs    # File reading
 │   └── unicode.rs   # Unicode utilities
-└── cli/             # CLI layer
-    ├── parser.rs    # Argument parsing
-    ├── commands.rs  # Command handlers
-    └── output.rs    # Output formatting
+├── cli/             # CLI layer
+│   ├── parser.rs    # Argument parsing
+│   ├── commands.rs  # Command handlers
+│   └── output.rs    # Output formatting
+└── agent/           # Agentic query engine (feature: "agent")
+    ├── orchestrator.rs  # Fan-out/collect pipeline
+    ├── executor.rs  # Tool-calling executor
+    ├── prompt.rs    # Prompt assembly
+    └── ...          # Config, providers, traits
 
 tests/
 └── integration_test.rs
@@ -455,7 +471,10 @@ tests/
 docs/
 ├── architecture.md  # Internal architecture
 ├── cli-reference.md # CLI documentation
-└── api.md           # Library API reference
+├── api.md           # Library API reference
+├── rlm-inspired-design.md  # Design philosophy
+├── plugin-integration.md   # Plugin integration guide
+└── prompts/         # Agent prompt documentation
 ```
 
 ## License
