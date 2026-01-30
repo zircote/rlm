@@ -32,6 +32,9 @@ pub mod storage;
 #[cfg(feature = "agent")]
 pub mod agent;
 
+#[cfg(feature = "mcp")]
+pub mod mcp;
+
 // Re-export commonly used types at crate root
 pub use error::{Error, Result};
 

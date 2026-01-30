@@ -124,6 +124,11 @@ pub enum Commands {
     #[command(subcommand)]
     Agent(AgentCommands),
 
+    /// Start MCP (Model Context Protocol) server.
+    #[cfg(feature = "mcp")]
+    #[command(subcommand)]
+    Mcp(McpCommands),
+
     // ── Hidden deprecated aliases ────────────────────────────────
     // These keep old scripts working but are hidden from --help.
     // They will be removed in a future major version.
@@ -533,6 +538,38 @@ pub enum ContextCommands {
         /// Delete the variable.
         #[arg(short, long)]
         delete: bool,
+    },
+}
+
+/// MCP server subcommands.
+#[cfg(feature = "mcp")]
+#[derive(Subcommand, Debug)]
+pub enum McpCommands {
+    /// Start MCP server with stdio transport.
+    ///
+    /// Reads JSON-RPC messages from stdin, writes responses to stdout.
+    /// This is the standard transport for Claude Code integration.
+    #[command(after_help = r#"Examples:
+  rlm-rs mcp stdio                         # Start stdio MCP server
+  OPENAI_API_KEY=sk-... rlm-rs mcp stdio   # With API key
+"#)]
+    Stdio,
+
+    /// Start MCP server with SSE/HTTP transport.
+    ///
+    /// Listens for incoming HTTP connections using streamable HTTP transport.
+    #[command(after_help = r#"Examples:
+  rlm-rs mcp sse                            # Listen on 127.0.0.1:3000
+  rlm-rs mcp sse --host 0.0.0.0 --port 8080
+"#)]
+    Sse {
+        /// Host to bind to.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Port to bind to.
+        #[arg(long, default_value = "3000")]
+        port: u16,
     },
 }
 

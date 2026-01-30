@@ -11,4 +11,6 @@ pub use commands::execute;
 pub use output::OutputFormat;
 #[cfg(feature = "agent")]
 pub use parser::AgentCommands;
+#[cfg(feature = "mcp")]
+pub use parser::McpCommands;
 pub use parser::{BufferCommands, ChunkCommands, Cli, Commands, ContextCommands};

@@ -2,14 +2,10 @@
 //!
 //! Contains the business logic for each CLI command.
 
-// Allow style choices for clarity
-#![allow(clippy::format_push_string)]
+// Allow certain patterns that improve readability in CLI output formatting
 #![allow(clippy::uninlined_format_args)]
+#![allow(clippy::format_push_string)]
 #![allow(clippy::too_many_lines)]
-#![allow(clippy::option_if_let_else)]
-#![allow(clippy::manual_div_ceil)]
-#![allow(clippy::redundant_closure_for_method_calls)]
-#![allow(clippy::if_not_else)]
 
 use crate::chunking::{ChunkerMetadata, create_chunker};
 use crate::cli::output::{
@@ -18,6 +14,8 @@ use crate::cli::output::{
 };
 #[cfg(feature = "agent")]
 use crate::cli::parser::AgentCommands;
+#[cfg(feature = "mcp")]
+use crate::cli::parser::McpCommands;
 use crate::cli::parser::{BufferCommands, ChunkCommands, Cli, Commands, ContextCommands};
 use crate::core::{Buffer, Context, ContextValue};
 use crate::embedding::create_embedder;
@@ -28,6 +26,65 @@ use crate::storage::{SqliteStorage, Storage};
 use regex::RegexBuilder;
 use std::fmt::Write as FmtWrite;
 use std::io::{self, Read, Write as IoWrite};
+
+// ==================== Parameter Structs ====================
+
+/// Parameters for the search command.
+#[derive(Debug, Clone)]
+pub struct SearchParams<'a> {
+    /// Search query text.
+    pub query: &'a str,
+    /// Maximum number of results.
+    pub top_k: usize,
+    /// Minimum similarity threshold (0.0-1.0).
+    pub threshold: f32,
+    /// Search mode: hybrid, semantic, bm25.
+    pub mode: &'a str,
+    /// RRF k parameter for rank fusion.
+    pub rrf_k: u32,
+    /// Filter by buffer ID or name.
+    pub buffer_filter: Option<&'a str>,
+    /// Include content preview in results.
+    pub preview: bool,
+    /// Preview length in characters.
+    pub preview_len: usize,
+}
+
+/// Parameters for the agentic query command.
+#[cfg(feature = "agent")]
+#[derive(Debug, Clone, Default)]
+pub struct QueryCommandParams<'a> {
+    /// The analysis question or task.
+    pub query: &'a str,
+    /// Buffer to scope the analysis (ID or name).
+    pub buffer: Option<&'a str>,
+    /// Maximum concurrent API calls.
+    pub concurrency: usize,
+    /// Chunks per subcall batch.
+    pub batch_size: Option<usize>,
+    /// Model for subcall agents.
+    pub subcall_model: Option<&'a str>,
+    /// Model for the synthesizer agent.
+    pub synthesizer_model: Option<&'a str>,
+    /// Search mode (hybrid, semantic, bm25).
+    pub search_mode: Option<&'a str>,
+    /// Minimum similarity threshold for search results.
+    pub similarity_threshold: Option<f32>,
+    /// Maximum chunks to analyze (0 = unlimited).
+    pub max_chunks: usize,
+    /// Search depth: maximum results retrieved from the search layer.
+    pub top_k: Option<usize>,
+    /// Target number of concurrent subagents.
+    pub num_agents: Option<usize>,
+    /// Minimum relevance level for findings passed to the synthesizer.
+    pub finding_threshold: Option<&'a str>,
+    /// Skip the planning step.
+    pub skip_plan: bool,
+    /// Directory containing prompt template files.
+    pub prompt_dir: Option<&'a std::path::Path>,
+    /// Show detailed diagnostics.
+    pub verbose: bool,
+}
 
 /// Executes the CLI command.
 ///
@@ -60,18 +117,19 @@ pub fn execute(cli: &Cli) -> Result<String> {
             buffer,
             preview,
             preview_len,
-        } => cmd_search(
-            &db_path,
-            query,
-            *top_k,
-            *threshold,
-            mode,
-            *rrf_k,
-            buffer.as_deref(),
-            *preview,
-            *preview_len,
-            format,
-        ),
+        } => {
+            let params = SearchParams {
+                query,
+                top_k: *top_k,
+                threshold: *threshold,
+                mode,
+                rrf_k: *rrf_k,
+                buffer_filter: buffer.as_deref(),
+                preview: *preview,
+                preview_len: *preview_len,
+            };
+            cmd_search(&db_path, &params, format)
+        }
 
         // ── Buffer subcommands ──────────────────────────────────
         Commands::Buffer(sub) => execute_buffer(sub, &db_path, format),
@@ -85,6 +143,10 @@ pub fn execute(cli: &Cli) -> Result<String> {
         // ── Agent subcommands ───────────────────────────────────
         #[cfg(feature = "agent")]
         Commands::Agent(sub) => execute_agent(sub, &db_path, format),
+
+        // ── MCP server ───────────────────────────────────────────
+        #[cfg(feature = "mcp")]
+        Commands::Mcp(sub) => cmd_mcp(sub, &db_path),
 
         // ── Deprecated top-level aliases ────────────────────────
         // Hidden from --help. Print a deprecation warning to stderr.
@@ -145,25 +207,24 @@ pub fn execute(cli: &Cli) -> Result<String> {
             verbose,
         } => {
             deprecation_warning("query", "agent query");
-            cmd_query(
-                &db_path,
+            let params = QueryCommandParams {
                 query,
-                buffer.as_deref(),
-                *concurrency,
-                *batch_size,
-                subcall_model.as_deref(),
-                synthesizer_model.as_deref(),
-                search_mode.as_deref(),
-                *similarity_threshold,
-                *max_chunks,
-                *top_k,
-                *num_agents,
-                finding_threshold.as_deref(),
-                *skip_plan,
-                prompt_dir.as_deref(),
-                *verbose,
-                format,
-            )
+                buffer: buffer.as_deref(),
+                concurrency: *concurrency,
+                batch_size: *batch_size,
+                subcall_model: subcall_model.as_deref(),
+                synthesizer_model: synthesizer_model.as_deref(),
+                search_mode: search_mode.as_deref(),
+                similarity_threshold: *similarity_threshold,
+                max_chunks: *max_chunks,
+                top_k: *top_k,
+                num_agents: *num_agents,
+                finding_threshold: finding_threshold.as_deref(),
+                skip_plan: *skip_plan,
+                prompt_dir: prompt_dir.as_deref(),
+                verbose: *verbose,
+            };
+            cmd_query(&db_path, &params, format)
         }
     }
 }
@@ -329,25 +390,26 @@ fn execute_agent(
             skip_plan,
             prompt_dir,
             verbose,
-        } => cmd_query(
-            db_path,
-            query,
-            buffer.as_deref(),
-            *concurrency,
-            *batch_size,
-            subcall_model.as_deref(),
-            synthesizer_model.as_deref(),
-            search_mode.as_deref(),
-            *similarity_threshold,
-            *max_chunks,
-            *top_k,
-            *num_agents,
-            finding_threshold.as_deref(),
-            *skip_plan,
-            prompt_dir.as_deref(),
-            *verbose,
-            format,
-        ),
+        } => {
+            let params = QueryCommandParams {
+                query,
+                buffer: buffer.as_deref(),
+                concurrency: *concurrency,
+                batch_size: *batch_size,
+                subcall_model: subcall_model.as_deref(),
+                synthesizer_model: synthesizer_model.as_deref(),
+                search_mode: search_mode.as_deref(),
+                similarity_threshold: *similarity_threshold,
+                max_chunks: *max_chunks,
+                top_k: *top_k,
+                num_agents: *num_agents,
+                finding_threshold: finding_threshold.as_deref(),
+                skip_plan: *skip_plan,
+                prompt_dir: prompt_dir.as_deref(),
+                verbose: *verbose,
+            };
+            cmd_query(db_path, &params, format)
+        }
         AgentCommands::InitPrompts { dir } => cmd_init_prompts(dir.as_deref(), format),
         AgentCommands::Dispatch {
             buffer,
@@ -1126,8 +1188,26 @@ fn cmd_export_buffers(
     }
 }
 
-fn cmd_variable(
+/// Context variable kind for shared variable/global logic.
+#[derive(Copy, Clone)]
+enum ContextKind {
+    Variable,
+    Global,
+}
+
+impl ContextKind {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Variable => "variable",
+            Self::Global => "global",
+        }
+    }
+}
+
+/// Shared implementation for variable and global context operations.
+fn cmd_context_value(
     db_path: &std::path::Path,
+    kind: ContextKind,
     name: &str,
     value: Option<&str>,
     delete: bool,
@@ -1135,26 +1215,59 @@ fn cmd_variable(
 ) -> Result<String> {
     let mut storage = open_storage(db_path)?;
     let mut context = storage.load_context()?.unwrap_or_else(Context::new);
+    let label = kind.label();
 
     if delete {
-        context.remove_variable(name);
+        let _ = match kind {
+            ContextKind::Variable => context.remove_variable(name),
+            ContextKind::Global => context.remove_global(name),
+        };
         storage.save_context(&context)?;
-        return Ok(format!("Deleted variable: {name}\n"));
+        return Ok(format!("Deleted {label}: {name}\n"));
     }
 
     if let Some(v) = value {
-        context.set_variable(name.to_string(), ContextValue::String(v.to_string()));
+        match kind {
+            ContextKind::Variable => {
+                context.set_variable(name.to_string(), ContextValue::String(v.to_string()));
+            }
+            ContextKind::Global => {
+                context.set_global(name.to_string(), ContextValue::String(v.to_string()));
+            }
+        }
         storage.save_context(&context)?;
-        Ok(format!("Set variable: {name} = {v}\n"))
+        Ok(format!("Set {label}: {name} = {v}\n"))
     } else {
-        context.get_variable(name).map_or_else(
-            || Ok(format!("Variable '{name}' not found\n")),
+        let existing = match kind {
+            ContextKind::Variable => context.get_variable(name),
+            ContextKind::Global => context.get_global(name),
+        };
+        existing.map_or_else(
+            || Ok(format!("{} '{name}' not found\n", capitalize(label))),
             |v| match format {
                 OutputFormat::Text => Ok(format!("{name} = {v:?}\n")),
                 OutputFormat::Json | OutputFormat::Ndjson => Ok(format.to_json(v)),
             },
         )
     }
+}
+
+/// Capitalizes the first letter of a string.
+fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    chars.next().map_or_else(String::new, |c| {
+        c.to_uppercase().collect::<String>() + chars.as_str()
+    })
+}
+
+fn cmd_variable(
+    db_path: &std::path::Path,
+    name: &str,
+    value: Option<&str>,
+    delete: bool,
+    format: OutputFormat,
+) -> Result<String> {
+    cmd_context_value(db_path, ContextKind::Variable, name, value, delete, format)
 }
 
 fn cmd_global(
@@ -1164,28 +1277,7 @@ fn cmd_global(
     delete: bool,
     format: OutputFormat,
 ) -> Result<String> {
-    let mut storage = open_storage(db_path)?;
-    let mut context = storage.load_context()?.unwrap_or_else(Context::new);
-
-    if delete {
-        context.remove_global(name);
-        storage.save_context(&context)?;
-        return Ok(format!("Deleted global: {name}\n"));
-    }
-
-    if let Some(v) = value {
-        context.set_global(name.to_string(), ContextValue::String(v.to_string()));
-        storage.save_context(&context)?;
-        Ok(format!("Set global: {name} = {v}\n"))
-    } else {
-        context.get_global(name).map_or_else(
-            || Ok(format!("Global '{name}' not found\n")),
-            |v| match format {
-                OutputFormat::Text => Ok(format!("{name} = {v:?}\n")),
-                OutputFormat::Json | OutputFormat::Ndjson => Ok(format.to_json(v)),
-            },
-        )
-    }
+    cmd_context_value(db_path, ContextKind::Global, name, value, delete, format)
 }
 
 // ==================== Dispatch Command ====================
@@ -1247,17 +1339,15 @@ fn cmd_dispatch(
     }
 
     // Calculate batch assignments
-    let effective_batch_size = if let Some(num_workers) = workers {
+    let effective_batch_size = workers.map_or(batch_size, |num_workers| {
         // Divide chunks evenly among workers
-        (chunk_ids.len() + num_workers - 1) / num_workers
-    } else {
-        batch_size
-    };
+        chunk_ids.len().div_ceil(num_workers)
+    });
 
     // Create batches
     let batches: Vec<Vec<i64>> = chunk_ids
         .chunks(effective_batch_size)
-        .map(|chunk| chunk.to_vec())
+        .map(<[i64]>::to_vec)
         .collect();
 
     match format {
@@ -1280,7 +1370,7 @@ fn cmd_dispatch(
                     batch
                         .iter()
                         .take(5)
-                        .map(|id| id.to_string())
+                        .map(ToString::to_string)
                         .collect::<Vec<_>>()
                         .join(", ")
                         + if batch.len() > 5 { ", ..." } else { "" }
@@ -1314,24 +1404,16 @@ fn cmd_dispatch(
 
 // ==================== Search Commands ====================
 
-#[allow(clippy::too_many_arguments)]
 fn cmd_search(
     db_path: &std::path::Path,
-    query: &str,
-    top_k: usize,
-    threshold: f32,
-    mode: &str,
-    rrf_k: u32,
-    buffer_filter: Option<&str>,
-    preview: bool,
-    preview_len: usize,
+    params: &SearchParams<'_>,
     format: OutputFormat,
 ) -> Result<String> {
     let storage = open_storage(db_path)?;
     let embedder = create_embedder()?;
 
     // If buffer filter is specified, validate it exists and scope the search
-    let buffer_id = if let Some(identifier) = buffer_filter {
+    let buffer_id = if let Some(identifier) = params.buffer_filter {
         let buffer = resolve_buffer(&storage, identifier)?;
         buffer.id
     } else {
@@ -1339,20 +1421,25 @@ fn cmd_search(
     };
 
     let config = SearchConfig::new()
-        .with_top_k(top_k)
-        .with_threshold(threshold)
-        .with_rrf_k(rrf_k)
-        .with_mode(&mode.to_lowercase())
+        .with_top_k(params.top_k)
+        .with_threshold(params.threshold)
+        .with_rrf_k(params.rrf_k)
+        .with_mode(&params.mode.to_lowercase())
         .with_buffer_id(buffer_id);
 
-    let mut results = hybrid_search(&storage, embedder.as_ref(), query, &config)?;
+    let mut results = hybrid_search(&storage, embedder.as_ref(), params.query, &config)?;
 
     // Populate content previews if requested
-    if preview {
-        crate::search::populate_previews(&storage, &mut results, preview_len)?;
+    if params.preview {
+        crate::search::populate_previews(&storage, &mut results, params.preview_len)?;
     }
 
-    Ok(format_search_results(&results, query, mode, format))
+    Ok(format_search_results(
+        &results,
+        params.query,
+        params.mode,
+        format,
+    ))
 }
 
 /// Formats a score for display, using scientific notation for very small values.
@@ -1629,18 +1716,16 @@ fn cmd_chunk_embed(
     )?;
 
     // Check for model version mismatch warning
-    let model_warning = if !force {
-        if let Some(existing_model) =
-            crate::search::check_model_mismatch(&storage, buffer_id, &result.model_name)?
-        {
-            Some(format!(
-                "Warning: Some embeddings use model '{existing_model}', current model is '{}'. \
-                 Use --force to regenerate with the new model.",
-                result.model_name
-            ))
-        } else {
-            None
-        }
+    let model_warning = if force {
+        None
+    } else if let Some(existing_model) =
+        crate::search::check_model_mismatch(&storage, buffer_id, &result.model_name)?
+    {
+        Some(format!(
+            "Warning: Some embeddings use model '{existing_model}', current model is '{}'. \
+             Use --force to regenerate with the new model.",
+            result.model_name
+        ))
     } else {
         None
     };
@@ -1653,12 +1738,7 @@ fn cmd_chunk_embed(
                 output.push('\n');
             }
 
-            if !result.had_changes() {
-                output.push_str(&format!(
-                    "Buffer '{buffer_name}' already fully embedded ({} chunks). Use --force to re-embed.\n",
-                    result.total_chunks
-                ));
-            } else {
+            if result.had_changes() {
                 if result.embedded_count > 0 {
                     output.push_str(&format!(
                         "Embedded {} new chunks in buffer '{buffer_name}' using model '{}'.\n",
@@ -1677,6 +1757,11 @@ fn cmd_chunk_embed(
                         result.skipped_count
                     ));
                 }
+            } else {
+                output.push_str(&format!(
+                    "Buffer '{buffer_name}' already fully embedded ({} chunks). Use --force to re-embed.\n",
+                    result.total_chunks
+                ));
             }
             Ok(output)
         }
@@ -1804,24 +1889,9 @@ fn truncate_str(s: &str, max_len: usize) -> String {
 // ==================== Agent Query Command ====================
 
 #[cfg(feature = "agent")]
-#[allow(clippy::too_many_arguments)]
 fn cmd_query(
     db_path: &std::path::Path,
-    query: &str,
-    buffer: Option<&str>,
-    concurrency: usize,
-    batch_size: Option<usize>,
-    subcall_model: Option<&str>,
-    synthesizer_model: Option<&str>,
-    search_mode: Option<&str>,
-    threshold: Option<f32>,
-    max_chunks: usize,
-    top_k: Option<usize>,
-    num_agents: Option<usize>,
-    finding_threshold: Option<&str>,
-    skip_plan: bool,
-    prompt_dir: Option<&std::path::Path>,
-    verbose: bool,
+    params: &QueryCommandParams<'_>,
     format: OutputFormat,
 ) -> Result<String> {
     use crate::agent::client::create_provider;
@@ -1832,7 +1902,7 @@ fn cmd_query(
     let storage = open_storage(db_path)?;
 
     // Resolve buffer identifier (ID or name) to a buffer name
-    let resolved_buffer_name: Option<String> = if let Some(ident) = buffer {
+    let resolved_buffer_name: Option<String> = if let Some(ident) = params.buffer {
         let buf = resolve_buffer(&storage, ident)?;
         buf.name
     } else {
@@ -1841,20 +1911,20 @@ fn cmd_query(
 
     // Build agent configuration from env + CLI overrides
     let mut builder = AgentConfig::builder().from_env();
-    builder = builder.max_concurrency(concurrency);
-    if let Some(bs) = batch_size {
+    builder = builder.max_concurrency(params.concurrency);
+    if let Some(bs) = params.batch_size {
         builder = builder.batch_size(bs);
     }
-    if let Some(k) = top_k {
+    if let Some(k) = params.top_k {
         builder = builder.search_top_k(k);
     }
-    if let Some(model) = subcall_model {
+    if let Some(model) = params.subcall_model {
         builder = builder.subcall_model(model);
     }
-    if let Some(model) = synthesizer_model {
+    if let Some(model) = params.synthesizer_model {
         builder = builder.synthesizer_model(model);
     }
-    if let Some(dir) = prompt_dir {
+    if let Some(dir) = params.prompt_dir {
         builder = builder.prompt_dir(dir);
     }
 
@@ -1869,18 +1939,18 @@ fn cmd_query(
     let orchestrator = Orchestrator::new(Arc::from(provider), config);
 
     let cli_overrides = CliOverrides {
-        search_mode: search_mode.map(String::from),
-        batch_size,
-        threshold,
-        max_chunks: if max_chunks > 0 {
-            Some(max_chunks)
+        search_mode: params.search_mode.map(String::from),
+        batch_size: params.batch_size,
+        threshold: params.similarity_threshold,
+        max_chunks: if params.max_chunks > 0 {
+            Some(params.max_chunks)
         } else {
             None
         },
-        top_k,
-        num_agents,
-        finding_threshold: finding_threshold.map(Relevance::parse),
-        skip_plan,
+        top_k: params.top_k,
+        num_agents: params.num_agents,
+        finding_threshold: params.finding_threshold.map(Relevance::parse),
+        skip_plan: params.skip_plan,
     };
 
     // Create tokio runtime as sync/async bridge
@@ -1892,7 +1962,7 @@ fn cmd_query(
         orchestrator
             .query(
                 &storage,
-                query,
+                params.query,
                 resolved_buffer_name.as_deref(),
                 Some(cli_overrides),
             )
@@ -1927,7 +1997,7 @@ fn cmd_query(
                 for err in &query_result.batch_errors {
                     output.push_str(&format!("\nBatch error: {err}"));
                 }
-                if verbose {
+                if params.verbose {
                     let ids: Vec<String> = query_result
                         .analyzed_chunk_ids
                         .iter()
@@ -2003,6 +2073,33 @@ fn cmd_init_prompts(dir: Option<&std::path::Path>, format: OutputFormat) -> Resu
             Ok(format.to_json(&json))
         }
     }
+}
+
+/// Starts the MCP server with the specified transport.
+///
+/// Creates the MCP server with an attached orchestrator and runs it
+/// until the client disconnects (stdio) or the server is stopped (SSE).
+#[cfg(feature = "mcp")]
+fn cmd_mcp(cmd: &McpCommands, db_path: &std::path::Path) -> Result<String> {
+    use crate::mcp::{RlmMcpServer, serve_sse, serve_stdio};
+
+    let server = RlmMcpServer::new(db_path.to_path_buf()).map_err(|e| {
+        crate::error::CommandError::ExecutionFailed(format!("Failed to create MCP server: {e}"))
+    })?;
+
+    let rt = tokio::runtime::Runtime::new().map_err(|e| {
+        crate::error::CommandError::ExecutionFailed(format!("Failed to create async runtime: {e}"))
+    })?;
+
+    rt.block_on(async {
+        match cmd {
+            McpCommands::Stdio => serve_stdio(server).await,
+            McpCommands::Sse { host, port } => serve_sse(server, host, *port).await,
+        }
+    })
+    .map_err(|e| crate::error::CommandError::ExecutionFailed(format!("MCP server error: {e}")))?;
+
+    Ok(String::new())
 }
 
 #[cfg(test)]
