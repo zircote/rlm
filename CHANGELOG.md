@@ -54,6 +54,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Testing**: Integration tests for `aggregate`, `dispatch`, and `Relevance` types
 - **Documentation**: ADRs for error handling, concurrency model, and feature flags
 - **Documentation**: MCP agentic workflow prompts (analyst, orchestrator, synthesizer)
+- **MCP**: Model Context Protocol server (feature-gated: `mcp`)
+  - `query` tool runs the full agentic pipeline (plan → search → fan-out → synthesis) and returns synthesized results
+  - Buffers and chunks exposed as MCP resources at `rlm-rs://{buffer}` and `rlm-rs://{buffer}/{chunk_index}`
+  - Resource templates for discoverability
+  - Stdio transport for Claude Code integration (`rlm-rs mcp stdio`)
+  - Streamable HTTP transport for network access (`rlm-rs mcp sse --host 0.0.0.0 --port 3000`)
+  - `spawn_blocking` bridge for `!Send` SQLite storage in async rmcp runtime
+- **MCP**: Claude Code orchestrator agent (`.claude/agents/orchestrator.md`)
+  - Delegates document analysis to rlm-rs MCP server
+  - Parameter guidance for search modes, scaling, and precision tuning
 
 ### Changed
 
@@ -112,6 +122,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Dependencies
 
+- Add `rmcp` 0.14 for Model Context Protocol server support
+- Add `schemars` 1.0 for MCP tool JSON Schema generation
+- Add `axum` 0.8 for streamable HTTP transport
+- Add `tokio-util` 0.7 for cancellation token support
 - Bump `actions/github-script` from 7 to 8 ([#7])
 - Bump `criterion` from 0.5.1 to 0.8.1 ([#9])
 - Bump `rusqlite` from 0.33.0 to 0.38.0 ([#8])
