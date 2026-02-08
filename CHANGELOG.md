@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-02-08
+
 ### Added
 
 - **Chunking**: Code-aware chunker for language-specific boundaries
@@ -33,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Model version tracking for migration detection
 - **Embedding**: Model name tracking in `Embedder` trait
 - **Output**: NDJSON format support (`--format ndjson`)
+- **CI**: Crates.io publish workflow with pre-publish validation
+- **CI**: Dependabot auto-merge workflow
 - **Documentation**: ADRs for error handling, concurrency model, and feature flags
 - **Documentation**: MCP agentic workflow prompts (analyst, orchestrator, synthesizer)
 
@@ -44,8 +48,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Error**: Dedicated `Embedding` error variant in `StorageError`
 - **Embedding**: Removed unnecessary unsafe `Send`/`Sync` impls from `FallbackEmbedder`
 
+### Fixed
+
+- **Search**: Resolve usearch segfault via move semantics fix
+- **Documentation**: Fix unresolved intra-doc links in Chunk methods
+
+### Security
+
+- Update `bytes` to 1.11.1 to resolve RUSTSEC-2026-0007
+
 ### Dependencies
 
+- Bump `bytes` from 1.10.1 to 1.11.1
+- Bump `clap` from 4.5.54 to 4.5.56 ([#11])
+- Bump the github-actions group with 2 updates ([#12])
 - Bump `actions/github-script` from 7 to 8 ([#7])
 - Bump `criterion` from 0.5.1 to 0.8.1 ([#9])
 - Bump `rusqlite` from 0.33.0 to 0.38.0 ([#8])
@@ -151,7 +167,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Variable storage (context and global)
 - Export functionality
 
-[Unreleased]: https://github.com/zircote/rlm-rs/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/zircote/rlm-rs/compare/v1.2.4...HEAD
+[1.2.4]: https://github.com/zircote/rlm-rs/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/zircote/rlm-rs/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/zircote/rlm-rs/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/zircote/rlm-rs/compare/v1.2.0...v1.2.1
