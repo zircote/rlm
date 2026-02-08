@@ -1,5 +1,5 @@
 [package]
-name = "rlm-rs"
+name = "rlm-cli"
 version = "1.2.4"
 edition = "2024"
 rust-version = "1.88"
@@ -8,7 +8,7 @@ license = "MIT"
 authors = ["zircote"]
 repository = "https://github.com/zircote/rlm-rs"
 homepage = "https://github.com/zircote/rlm-rs"
-documentation = "https://docs.rs/rlm-rs"
+documentation = "https://docs.rs/rlm-cli"
 readme = "README.md"
 keywords = ["llm", "claude", "recursive", "language-model", "repl"]
 categories = ["command-line-utilities", "text-processing"]
