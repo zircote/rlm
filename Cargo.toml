@@ -53,7 +53,7 @@ fastembed = { version = "5", optional = true, default-features = false, features
 # usearch HNSW vector search (optional - BM25-only fallback if not available)
 # Using git branch with move semantics fix until PR #704 is merged
 # See: https://github.com/unum-cloud/usearch/pull/704
-usearch = { git = "https://github.com/madmax983/USearch.git", branch = "fix/rust-move-semantics", optional = true }
+usearch = { version = "2.23", git = "https://github.com/madmax983/USearch.git", branch = "fix/rust-move-semantics", optional = true }
 
 [dev-dependencies]
 # Testing
