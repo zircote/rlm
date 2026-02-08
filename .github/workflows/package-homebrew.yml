@@ -1,0 +1,114 @@
+---
+name: Homebrew Package
+
+"on":
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to package'
+        required: true
+      dry_run:
+        description: 'Dry run (do not push)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  homebrew:
+    name: Update Homebrew Formula
+    runs-on: macos-latest
+    environment: copilot
+
+    steps:
+      - name: Checkout homebrew tap
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          repository: ${{ github.repository_owner }}/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Get release info
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            VERSION="$RELEASE_TAG"
+            VERSION="${VERSION#v}"
+          else
+            VERSION="$INPUT_VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # Source tarball URL
+          SRC_URL="https://github.com/${REPO}"
+          SRC_URL="${SRC_URL}/archive/refs/tags"
+          SRC_URL="${SRC_URL}/v${VERSION}.tar.gz"
+
+          # Compute SHA256
+          SRC_SHA=$(curl -sL "$SRC_URL" \
+            | shasum -a 256 | awk '{print $1}')
+
+          echo "src_url=$SRC_URL" >> "$GITHUB_OUTPUT"
+          echo "src_sha=$SRC_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Generate source formula
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          REPO: ${{ github.repository }}
+          SRC_URL: ${{ steps.release.outputs.src_url }}
+          SRC_SHA: ${{ steps.release.outputs.src_sha }}
+        run: |
+          cat > homebrew-tap/Formula/rlm-rs.rb << FORMULA
+          class RlmRs < Formula
+            desc "Recursive Language Model CLI for Claude Code"
+            homepage "https://github.com/${REPO}"
+            url "${SRC_URL}"
+            sha256 "${SRC_SHA}"
+            version "${VERSION}"
+            license "MIT"
+            head "https://github.com/${REPO}.git", branch: "main"
+
+            depends_on "rust" => :build
+
+            def install
+              system "cargo", "install", *std_cargo_args
+            end
+
+            test do
+              assert_match version.to_s,
+                shell_output("#{bin}/rlm-rs --version")
+
+              system "#{bin}/rlm-rs", "init"
+              assert_predicate testpath/".rlm/rlm-state.db", :exist?
+            end
+          end
+          FORMULA
+
+      - name: Commit and push formula
+        if: github.event.inputs.dry_run != 'true'
+        working-directory: homebrew-tap
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "github-actions[bot]@users.noreply.github.com"
+
+          git add Formula/rlm-rs.rb
+          git commit -m "rlm-rs: update to ${VERSION}"
+          git push
+
+      - name: Show formula (dry run)
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "=== rlm-rs.rb (source) ==="
+          cat homebrew-tap/Formula/rlm-rs.rb

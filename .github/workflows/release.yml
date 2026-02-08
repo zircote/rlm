@@ -1,95 +1,46 @@
+---
 name: Release
 
-on:
+"on":
   push:
     tags:
-      - 'v*'
+      - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  release:
+  create-release:
     name: Create Release
     runs-on: ubuntu-latest
+    environment: copilot
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      sha256: ${{ steps.sha256.outputs.sha256 }}
+      version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v6.0.2
+        with:
+          fetch-depth: 0
 
       - name: Get version from tag
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        # yamllint disable-line rule:line-length
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b  # v2.0.3
         with:
+          tag_name: ${{ github.ref }}
+          name: Release ${{ steps.get_version.outputs.version }}
           generate_release_notes: true
-
-      - name: Calculate SHA256
-        id: sha256
+          draft: false
+          prerelease: false
         env:
-          TAG_NAME: ${{ github.ref_name }}
-          REPO: ${{ github.repository }}
-        run: |
-          curl -sL "https://github.com/${REPO}/archive/refs/tags/${TAG_NAME}.tar.gz" -o release.tar.gz
-          SHA256=$(shasum -a 256 release.tar.gz | cut -d' ' -f1)
-          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
-
-  update-homebrew:
-    name: Update Homebrew Tap
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Update Homebrew formula
-        uses: actions/github-script@v8
-        with:
-          github-token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          script: |
-            const version = '${{ needs.release.outputs.version }}';
-            const sha256 = '${{ needs.release.outputs.sha256 }}';
-
-            const formula = `class RlmRs < Formula
-              desc "Recursive Language Model CLI for Claude Code - handles long-context tasks via chunking"
-              homepage "https://github.com/zircote/rlm-rs"
-              url "https://github.com/zircote/rlm-rs/archive/refs/tags/v${version}.tar.gz"
-              sha256 "${sha256}"
-              license "MIT"
-              head "https://github.com/zircote/rlm-rs.git", branch: "main"
-
-              depends_on "rust" => :build
-
-              def install
-                system "cargo", "install", *std_cargo_args
-              end
-
-              test do
-                assert_match "rlm-rs #{version}", shell_output("#{bin}/rlm-rs --version")
-
-                # Test init command
-                system "#{bin}/rlm-rs", "init"
-                assert_predicate testpath/".rlm/rlm-state.db", :exist?
-              end
-            end
-            `;
-
-            // Get current file to get its SHA
-            const { data: currentFile } = await github.rest.repos.getContent({
-              owner: 'zircote',
-              repo: 'homebrew-tap',
-              path: 'Formula/rlm-rs.rb',
-            });
-
-            // Update the formula
-            await github.rest.repos.createOrUpdateFileContents({
-              owner: 'zircote',
-              repo: 'homebrew-tap',
-              path: 'Formula/rlm-rs.rb',
-              message: `chore: bump rlm-rs to v${version}`,
-              content: Buffer.from(formula).toString('base64'),
-              sha: currentFile.sha,
-            });
-
-            console.log(`Updated rlm-rs formula to v${version}`);
+          # Use PAT so release event propagates to
+          # downstream workflows (homebrew)
+          GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
