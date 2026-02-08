@@ -18,7 +18,7 @@ name = "rlm_rs"
 path = "src/lib.rs"
 
 [[bin]]
-name = "rlm-rs"
+name = "rlm-cli"
 path = "src/main.rs"
 
 [dependencies]

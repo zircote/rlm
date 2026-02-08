@@ -67,8 +67,8 @@ jobs:
           SRC_URL: ${{ steps.release.outputs.src_url }}
           SRC_SHA: ${{ steps.release.outputs.src_sha }}
         run: |
-          cat > homebrew-tap/Formula/rlm-rs.rb << FORMULA
-          class RlmRs < Formula
+          cat > homebrew-tap/Formula/rlm-cli.rb << FORMULA
+          class RlmCli < Formula
             desc "Recursive Language Model CLI for Claude Code"
             homepage "https://github.com/${REPO}"
             url "${SRC_URL}"
@@ -85,9 +85,9 @@ jobs:
 
             test do
               assert_match version.to_s,
-                shell_output("#{bin}/rlm-rs --version")
+                shell_output("#{bin}/rlm-cli --version")
 
-              system "#{bin}/rlm-rs", "init"
+              system "#{bin}/rlm-cli", "init"
               assert_predicate testpath/".rlm/rlm-state.db", :exist?
             end
           end
@@ -103,12 +103,12 @@ jobs:
           git config user.email \
             "github-actions[bot]@users.noreply.github.com"
 
-          git add Formula/rlm-rs.rb
-          git commit -m "rlm-rs: update to ${VERSION}"
+          git add Formula/rlm-cli.rb
+          git commit -m "rlm-cli: update to ${VERSION}"
           git push
 
       - name: Show formula (dry run)
         if: github.event.inputs.dry_run == 'true'
         run: |
-          echo "=== rlm-rs.rb (source) ==="
-          cat homebrew-tap/Formula/rlm-rs.rb
+          echo "=== rlm-cli.rb (source) ==="
+          cat homebrew-tap/Formula/rlm-cli.rb

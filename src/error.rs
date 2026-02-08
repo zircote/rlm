@@ -54,7 +54,7 @@ pub enum StorageError {
     Database(String),
 
     /// Storage not initialized (init command not run).
-    #[error("RLM not initialized. Run: rlm-rs init")]
+    #[error("RLM not initialized. Run: rlm-cli init")]
     NotInitialized,
 
     /// Context not found in storage.
@@ -339,7 +339,7 @@ mod tests {
     #[test]
     fn test_storage_error_display() {
         let err = StorageError::NotInitialized;
-        assert_eq!(err.to_string(), "RLM not initialized. Run: rlm-rs init");
+        assert_eq!(err.to_string(), "RLM not initialized. Run: rlm-cli init");
 
         let err = StorageError::BufferNotFound {
             identifier: "test-buffer".to_string(),

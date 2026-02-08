@@ -1084,7 +1084,7 @@ fn cmd_dispatch(
             }
 
             output
-                .push_str("\nUsage: Feed each batch to a subagent with 'rlm-rs chunk get <id>'\n");
+                .push_str("\nUsage: Feed each batch to a subagent with 'rlm-cli chunk get <id>'\n");
             Ok(output)
         }
         OutputFormat::Json | OutputFormat::Ndjson => {
@@ -1230,7 +1230,7 @@ fn format_search_results(
                 }
             }
 
-            output.push_str("\nUse 'rlm-rs chunk get <id>' to retrieve chunk content.\n");
+            output.push_str("\nUse 'rlm-cli chunk get <id>' to retrieve chunk content.\n");
             output
         }
         OutputFormat::Json | OutputFormat::Ndjson => {

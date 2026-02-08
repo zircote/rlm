@@ -344,15 +344,15 @@ const fn get_error_details(error: &crate::Error) -> (&'static str, Option<&'stat
         crate::Error::Storage(e) => match e {
             StorageError::NotInitialized => (
                 "NotInitialized",
-                Some("Run 'rlm-rs init' to initialize the database"),
+                Some("Run 'rlm-cli init' to initialize the database"),
             ),
             StorageError::BufferNotFound { .. } => (
                 "BufferNotFound",
-                Some("Run 'rlm-rs list' to see available buffers"),
+                Some("Run 'rlm-cli list' to see available buffers"),
             ),
             StorageError::ChunkNotFound { .. } => (
                 "ChunkNotFound",
-                Some("Run 'rlm-rs chunk list <buffer>' to see valid chunk IDs"),
+                Some("Run 'rlm-cli chunk list <buffer>' to see valid chunk IDs"),
             ),
             StorageError::ContextNotFound => ("ContextNotFound", Some("Context not yet created")),
             StorageError::Database(_) => ("DatabaseError", None),
